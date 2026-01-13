@@ -1,0 +1,2 @@
+# AI-Powered Multi-Agent System for Code Repository Management
+A multi-agent GitHub App designed to manage and maintain your codebase on GitHub autonomously. It uses Agentic AI to perform code reviews, audit your repositories & effectively management your dependency updates.
