@@ -2,11 +2,12 @@
   "name": "gitagents",
   "version": "1.0.0",
   "description": "A Multi-agent GitHub App designed to autonomously manage and maintain your codebase across platforms like GitHub and GitLab.",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "type": "module",
   "scripts": {
-    "dev": "nodemon --exec babel-node index.js",
-    "start": "babel-node index.js",
-    "tests": "node tests/codeQualityCheck.js"
+    "build": "tsc",
+    "dev": "npx tsx index.ts",
+    "start": "node dist/index.js"
   },
   "keywords": [],
   "author": "tommyc2",
@@ -18,7 +19,6 @@
     "@octokit/webhooks": "^14.0.2",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "nodemon": "^3.1.10",
     "octokit": "^5.0.3",
     "openai": "^5.8.2"
   },
@@ -27,7 +27,9 @@
     "@babel/eslint-parser": "^7.25.9",
     "@babel/node": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
-    "nodemon": "^3.1.7"
-  },
-  "type": "module"
+    "@types/node": "^25.0.9",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "nodemon": "^3.1.10"
+  }
 }

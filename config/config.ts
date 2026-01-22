@@ -3,4 +3,4 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export const githubApiVersion = "2022-11-28";
+export const githubApiVersion: string = "2022-11-28";

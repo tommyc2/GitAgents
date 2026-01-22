@@ -1,7 +1,12 @@
 // system prompts for the agents
 import { githubApiVersion } from "./config.js";
 
-export const codeReviewPrompt = (owner, repo, pullNumber, commitId, fileURLs) => `
+export const codeReviewPrompt = (
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  commitId: string,
+  fileURLs: string[]): string => `
 You are a code review expert.
 
 Review the changed files listed in ${fileURLs} (raw GitHub URLs). Return **only** a valid JSON object matching the structure below. No extra text, explanations, or markdown. The output will be parsed as a JavaScript object.
