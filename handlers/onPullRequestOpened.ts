@@ -1,6 +1,11 @@
 import { githubApiVersion } from "../config/config.js";
 import { generateCodeReview } from "../agents/codeReview.js";
 
+interface FileData {
+    data: any; // raw file data from GitHub API
+    content: any; // content of the file
+}
+
 export async function onPullRequestOpened({ octokit, payload }) {
     console.log(`PR Opened : No.${payload.number} from ${payload.repository.full_name}`);
     
@@ -17,19 +22,44 @@ export async function onPullRequestOpened({ octokit, payload }) {
             'X-GitHub-Api-Version': githubApiVersion
         }
     });
+
     //console.log(JSON.stringify(response));
     if (response) {
         const data = response.data;
-        const fileURLs: string[] = [];
+        const files: FileData[] = [];
+
+        
+        const { token } = await octokit.auth({ type: "installation" }); // https://stackoverflow.com/questions/60161028/how-do-you-authenticate-a-github-app-in-node-js
+
+        console.log("Token: ", token);
 
         for (const file of data) {
-            if (file.raw_url) {
-                fileURLs.push(file.raw_url);
+            if (file) {
+                const response = await fetch(file.contents_url, {
+                    headers: {
+                        'X-GitHub-Api-Version': `${githubApiVersion}`,
+                        'Authorization': `Bearer ${token}`,
+                    }
+                });
+                const json = await response.json() as { content: string };
+
+                const cleanedBase64 = json.content.replace(/\s+/g, '')
+                
+                const plaintext = Buffer.from(cleanedBase64, 'base64').toString('utf-8'); // https://stackoverflow.com/questions/26721893/convert-buffer-base64-utf8-encoding-node-js
+
+                const fileData: FileData = {
+                    data: file, //  note: data object from the response (e.g. data [{filename etc...}])
+                    content: plaintext
+                };
+
+                files.push(fileData);
             }
         }
-        console.log(fileURLs);
+        console.log("Files: ", files);
         
-        const codeReviewResponse = await generateCodeReview(owner, repo, pullNumber, commitId, fileURLs);
+        const codeReviewResponse = await generateCodeReview(owner, repo, pullNumber, commitId, files);
+
+        console.log(" ----- Code Review ------\n", codeReviewResponse);
 
         await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', codeReviewResponse);
     }

@@ -13,7 +13,8 @@ export interface CodeReviewResponse {
     event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
     comments: {
         path: string;
-        position: number;
+        line: number;
+        side: "LEFT" | "RIGHT";
         body: string;
     }[];
     headers: {
@@ -30,11 +31,11 @@ export async function generateCodeReview(
     repo: string,
     pullNumber: number,
     commitId: string,
-    fileURLs: string[]
+    files: any[] // FileData[] later,
 ) {
     const output = await openAIClient.responses.create({
         model: 'gpt-5.2-2025-12-11', // hardcoded for now, will change later to opus etc
-        input: codeReviewPrompt(owner, repo, pullNumber, commitId, fileURLs)
+        input: codeReviewPrompt(owner, repo, pullNumber, commitId, files)
     });
     return JSON.parse(output.output_text) as CodeReviewResponse;
 }

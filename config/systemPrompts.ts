@@ -6,30 +6,35 @@ export const codeReviewPrompt = (
   repo: string,
   pullNumber: number,
   commitId: string,
-  fileURLs: string[]): string => `
+  files: any[]): string => `
 You are a code review expert.
 
-Review the changed files listed in ${fileURLs} (raw GitHub URLs). Return **only** a valid JSON object matching the structure below. No extra text, explanations, or markdown. The output will be parsed as a JavaScript object.
+Review the changed files below:
+
+${JSON.stringify(files)}
+
+Return **only** a valid JSON object matching the structure below. No extra text, explanations, or markdown. The output will be parsed as a JavaScript object.
 
 The JSON structure is as follows:
 
 {
-  "owner": ${owner},
-  "repo": ${repo},
-  "pull_number": ${pullNumber},
-  "commit_id": ${commitId},
+  "owner": "${owner}",
+  "repo": "${repo}",
+  "pull_number": "${pullNumber}",
+  "commit_id": "${commitId}",
   "body": "", // Required if event is REQUEST_CHANGES or COMMENT. This is the main review message.
   "event": "REQUEST_CHANGES" | "COMMENT" | "APPROVE",
   "comments": [
     {
-      "path": "", // Required: file path in repo
-      "position": "", // Required: diff line position
+      "path": "", // REQUIRED: file path in repo
+      "line": <number>, // REQUIRED: diff line position (must be a number, not a string)
+      "side": "LEFT" | "RIGHT", // REQUIRED: diff line side (must be a string, not a number)
       "body": "Short, constructive comment (e.g., 'Could we simplify this?' or 'Why is this needed?')" // Required
     }
     // Add more comments if needed here
   ],
   "headers": {
-    "X-GitHub-Api-Version": ${githubApiVersion}
+    "X-GitHub-Api-Version": "${githubApiVersion}"
   }
 }
 
