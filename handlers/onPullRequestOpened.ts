@@ -1,10 +1,13 @@
-import { githubApiVersion } from "../config/config.js";
+import { githubApiVersion, packageManifestFiles } from "../config/config.js";
 import { generateCodeReview } from "../agents/codeReview.js";
+import { onManifestChange } from "./onManifestChange.js";
 
 interface FileData {
     data: any; // raw file data from GitHub API
     content: any; // content of the file
 }
+
+const userRepoManifestFileData: FileData[] = [];
 
 export async function onPullRequestOpened({ octokit, payload }) {
     console.log(`PR Opened : No.${payload.number} from ${payload.repository.full_name}`);
@@ -26,6 +29,7 @@ export async function onPullRequestOpened({ octokit, payload }) {
     //console.log(JSON.stringify(response));
     if (response) {
         const data = response.data;
+        console.log("Response: ", response);
         const files: FileData[] = [];
 
         
@@ -56,7 +60,20 @@ export async function onPullRequestOpened({ octokit, payload }) {
             }
         }
         console.log("Files: ", files);
-        
+
+        //////// Dependency Checker /////////////////////////
+        for (const file of files) {
+            if (packageManifestFiles.includes(file.data.path)) {
+                console.log("Package manifest file found: ", file.data.path);
+                userRepoManifestFileData.push(file);
+            }
+        }
+
+        if (userRepoManifestFileData.length > 0) {
+            await onManifestChange(octokit, payload, owner, repo, pullNumber,commitId, userRepoManifestFileData);
+        }
+         ///////////////////////////////////////////////////
+
         const codeReviewResponse = await generateCodeReview(owner, repo, pullNumber, commitId, files);
 
         console.log(" ----- Code Review ------\n", codeReviewResponse);
