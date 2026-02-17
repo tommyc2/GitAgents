@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "code-quality": "tsc --noEmit",
     "dev": "npx tsx index.ts",
+    "lint": "eslint . --ext .ts,.js --max-warnings=0",
     "start": "node dist/index.js"
   },
   "keywords": [],
@@ -28,8 +30,11 @@
     "@babel/node": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
     "@types/node": "^25.0.9",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "nodemon": "^3.1.10",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "nodemon": "^3.1.10"
+    "typescript": "^5.9.3"
   }
 }
