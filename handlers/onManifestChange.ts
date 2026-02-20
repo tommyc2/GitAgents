@@ -1,4 +1,4 @@
-import { generateDependencyReview } from "../agents/codeReview.js";
+import { generateDependencyReview } from "../agents/dependencyReview.js";
 
 //TODO: Create separate types file for this
 interface FileData {
@@ -6,7 +6,7 @@ interface FileData {
     content: any; // content of the file
 }
 
-export async function onManifestChange(octokit, payload, owner, repo, pullNumber,commitId, manifestFileData) {
+export async function onManifestChange(octokit, owner, repo, pullNumber,commitId, manifestFileData: FileData[]) {
 
     console.log("Package manifest files: ", manifestFileData);
 

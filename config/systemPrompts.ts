@@ -78,7 +78,9 @@ export const dependencyReviewPrompt = (
   }
   
   Guidelines:
-  - Focus ONLY on dependency manifest files (e.g., package.json, pom.xml, go.mod).
+  - Do not include any additional fields.
+  - The 'comments' field must never be included in your response.
+  - Focus ONLY on dependency manifest files (e.g., package.json, package-lock.json, pom.xml, go.mod).
   - Look for potential conflicts that could or will occur (e.g., mismatched peer dependencies, major version jumps without migration).
   - Always use "COMMENT" as the event.
   - Keep the body and comments extremely concise.

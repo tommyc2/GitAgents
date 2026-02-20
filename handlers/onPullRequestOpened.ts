@@ -59,18 +59,18 @@ export async function onPullRequestOpened({ octokit, payload }) {
                 files.push(fileData);
             }
         }
-        console.log("Files: ", files);
+        console.log("---- Files ----\n", files);
 
         //////// Dependency Checker /////////////////////////
         for (const file of files) {
-            if (packageManifestFiles.includes(file.data.path)) {
-                console.log("Package manifest file found: ", file.data.path);
+            if (packageManifestFiles.includes(file.data.filename)) {
+                console.log("Package manifest file found: ", file.data.filename);
                 userRepoManifestFileData.push(file);
             }
         }
 
         if (userRepoManifestFileData.length > 0) {
-            await onManifestChange(octokit, payload, owner, repo, pullNumber,commitId, userRepoManifestFileData);
+            await onManifestChange(octokit, owner, repo, pullNumber,commitId, userRepoManifestFileData);
         }
          ///////////////////////////////////////////////////
 
