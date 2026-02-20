@@ -51,3 +51,38 @@ Review guidelines:
 
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `
+
+export const dependencyReviewPrompt = (
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  commitId: string,
+  manifestFileData: any[]): string => `You are a dependency review expert.
+
+  Review the changed files below specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
+  
+  ${JSON.stringify(manifestFileData)}
+  
+  Return **only** a valid JSON object. No markdown or explanations.
+  
+  {
+    "owner": "${owner}",
+    "repo": "${repo}",
+    "pull_number": "${pullNumber}",
+    "commit_id": "${commitId}",
+    "body": "Summary of the conflict risks. Use appropriate emojis for each type of risk identified.",
+    "event": "COMMENT",
+    "headers": {
+      "X-GitHub-Api-Version": "${githubApiVersion}"
+    }
+  }
+  
+  Guidelines:
+  - Do not include any additional fields.
+  - The 'comments' field must never be included in your response.
+  - Focus ONLY on dependency manifest files (e.g., package.json, package-lock.json, pom.xml, go.mod).
+  - Look for potential conflicts that could or will occur (e.g., mismatched peer dependencies, major version jumps without migration).
+  - Always use "COMMENT" as the event.
+  - Keep the body and comments extremely concise.
+  - If no dependency risks are found, return an empty comments array and an empty body string.
+  `

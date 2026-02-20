@@ -4,7 +4,6 @@ import { createNodeMiddleware } from "@octokit/webhooks";
 import fs from "fs";
 import http from "http";
 import { onPullRequestOpened } from "./handlers/onPullRequestOpened.js";
-//import { onPullRequestMerged } from "./handlers/onPullRequestMerged.js";
 
 dotenv.config();
 
@@ -26,7 +25,6 @@ const app = new App({
 
 // Event listeners
 app.webhooks.on("pull_request.opened", onPullRequestOpened);
-//app.webhooks.on("pull_request.closed", onPullRequestMerged);
 
 // checking for errors on webhook trigger
 app.webhooks.onError((error) => {
