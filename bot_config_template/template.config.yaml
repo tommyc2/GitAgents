@@ -1,15 +1,35 @@
+---
 project:
-  name: "Repo Name"
-  description: "repo description"
+  name: "my-repo"
+  description: "Brief description of the repository"
 
-# AI Model Configuration
-ai_model:
-  provider: "openai" # openai, anthropic, google
-  model: "gpt-4"
-  tone: "constructive"
+global_config:
+  language: "en"
 
-ignore_files:
-  - "*.py"
-  - "package.json"
-  - "Dockerfile"
-  - ".json"
+model:
+  name: "gpt-5.2-codex"
+  max_tokens: 4096
+  temperature: 0.2
+
+code_review:
+  tone: "constructive"  # "constructive", "strict", "concise", "educational"
+  focus:
+    - "correctness"
+    - "security"
+    # - "performance"
+    # - "readability"
+    # - "testing"
+  ignore_patterns:
+    - "*.min.js"
+    - "dist/**"
+    - ".tekton/**"
+
+dependency_review:
+  enabled: true
+  manifest_files:
+    - "package-lock.json"
+    - "package.json"
+    # - "pom.xml"
+    # - "go.mod"
+    # - "requirements.txt"
+  risk_tolerance: "medium"  # "low", "medium", "high"
