@@ -1,6 +1,7 @@
 import { githubApiVersion, packageManifestFiles } from "../config/config.js";
 import { generateCodeReview } from "../agents/codeReview.js";
 import { onManifestChange } from "./onManifestChange.js";
+import { fetchYAMLConfig } from "../config/loadYAML.js";
 
 interface FileData {
     data: any; // raw file data from GitHub API
@@ -10,6 +11,19 @@ interface FileData {
 const userRepoManifestFileData: FileData[] = [];
 
 export async function onPullRequestOpened({ octokit, payload }) {
+
+    /// YAML Config Check //////////////////////////////////////////////////////////
+    const yamlConfig = await fetchYAMLConfig(octokit, payload.repository.owner.login, payload.repository.name);
+    if (!yamlConfig) {
+        console.error("Failed to load YAML config");
+        throw new Error("Failed to load YAML config");
+    }
+    const { model, global_config, code_review, dependency_review } = yamlConfig;
+    console.log("----- YAML Config -----\n",
+        { model, global_config, code_review, dependency_review },
+        "--------------------------------\n");
+    ////////////////////////////////////////////////////////////////////////////////
+
     console.log(`PR Opened : No.${payload.number} from ${payload.repository.full_name}`);
     
     const owner: string = payload.repository.owner.login;
