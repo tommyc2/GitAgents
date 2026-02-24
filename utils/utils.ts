@@ -1,3 +1,5 @@
+import yaml from "js-yaml";
+
 export function convertBase64ToString(base64: string): string {
     return Buffer.from(base64, 'base64').toString('utf-8');
 }
@@ -20,4 +22,8 @@ export function isNull(value: any): boolean {
 
 export function isNotNull(value: any): boolean {
     return value !== null;
+}
+
+export function parseYAML(input: string) {
+    return yaml.load(input);
 }
