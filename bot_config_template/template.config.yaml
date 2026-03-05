@@ -7,6 +7,7 @@ global_config:
   language: "en"
 
 model:
+  provider: "openai"
   name: "gpt-5.2-codex"
   max_tokens: 4096
   temperature: 0.2

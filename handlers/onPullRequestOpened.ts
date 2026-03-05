@@ -1,11 +1,18 @@
 import { githubApiVersion, packageManifestFiles } from "../config/config.js";
-import { generateCodeReview } from "../agents/codeReview.js";
 import { onManifestChange } from "./onManifestChange.js";
 import { fetchYAMLConfig } from "../config/loadYAML.js";
+import { runAgent } from "../agents/runAgent.js";
 
 interface FileData {
     data: any; // raw file data from GitHub API
     content: any; // content of the file
+}
+export interface YAMLConfig {
+    project?: string;
+    model: any;
+    global_config: any;
+    code_review: any;
+    dependency_review: any;
 }
 
 const userRepoManifestFileData: FileData[] = [];
@@ -18,10 +25,18 @@ export async function onPullRequestOpened({ octokit, payload }) {
         console.error("Failed to load YAML config");
         throw new Error("Failed to load YAML config");
     }
-    const { model, global_config, code_review, dependency_review } = yamlConfig;
+    const { project, global_config, model, code_review, dependency_review } = yamlConfig;
     console.log("----- YAML Config -----\n",
-        { model, global_config, code_review, dependency_review },
+        { project, global_config, model, code_review, dependency_review },
         "--------------------------------\n");
+
+    const config: YAMLConfig = {
+        project: project,
+        model: model,
+        global_config: global_config,
+        code_review: code_review,
+        dependency_review: dependency_review
+    }
     ////////////////////////////////////////////////////////////////////////////////
 
     console.log(`PR Opened : No.${payload.number} from ${payload.repository.full_name}`);
@@ -88,9 +103,10 @@ export async function onPullRequestOpened({ octokit, payload }) {
         }
          ///////////////////////////////////////////////////
 
-        const codeReviewResponse = await generateCodeReview(owner, repo, pullNumber, commitId, files);
+        //const codeReviewResponse = await generateCodeReview(owner, repo, pullNumber, commitId, files);
+        const codeReviewResponse = await runAgent(config, owner, repo, pullNumber, commitId, files);
 
-        console.log(" ----- Code Review ------\n", codeReviewResponse);
+        //console.log(" ----- Code Review ------\n", codeReviewResponse);
 
         await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', codeReviewResponse);
     }
