@@ -103,8 +103,7 @@ export async function onPullRequestOpened({ octokit, payload }) {
         }
          ///////////////////////////////////////////////////
 
-        //const codeReviewResponse = await generateCodeReview(owner, repo, pullNumber, commitId, files);
-        const codeReviewResponse = await runAgent(config, owner, repo, pullNumber, commitId, files);
+        const codeReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, files);
 
         //console.log(" ----- Code Review ------\n", codeReviewResponse);
 

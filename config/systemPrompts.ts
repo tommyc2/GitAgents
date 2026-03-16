@@ -7,7 +7,7 @@ export const codeReviewPrompt = (
   pullNumber: number,
   commitId: string,
   files: any[],
-  availableTools: any[]): string => `
+  availableTools: string): string => `
 You are a code review expert.
 
 Review the changed files below:
@@ -19,8 +19,8 @@ Return **only** a valid JSON Object following one of the two shapes below:
 1. If you need additional information before posting a review:
 {
   "type": "request_tool",
-  "tool": "fetch_file" | "search_symbol" | ...,
-  "args": { ... },
+  "tool": ${availableTools},
+  "args": [arg1, arg2, arg3], // array of arguments for the tool
 }
 
 2. If you have all the information you need to post a review:
@@ -68,7 +68,7 @@ export const dependencyReviewPrompt = (
   pullNumber: number,
   commitId: string,
   manifestFileData: any[],
-  availableTools: any[]): string => `
+  availableTools: string): string => `
 You are a dependency review expert.
 
 Review the changed manifest files below specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
@@ -80,7 +80,7 @@ Return **only** a valid JSON object following one of the two shapes below:
 1. If you need additional information before posting a review:
 {
   "type": "request_tool",
-  "tool": "fetch_file" | "search_symbol" | ...,
+  "tool": ${availableTools},
   "args": { ... },
 }
 
