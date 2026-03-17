@@ -15,7 +15,7 @@ type GenerateReviewFn = (
     messages: any[]
 ) => Promise<any>;
 
-export async function runAgent(config: YAMLConfig, octokit, owner: string, repo: string, pullNumber: number, commitId: string, files: any[], generateReview: GenerateReviewFn) {
+export async function runAgent(config: YAMLConfig, octokit, owner: string, repo: string, pullNumber: number, commitId: string, files: any[], generateReview: GenerateReviewFn): Promise<any> {
     const toolUnionString = loadToolMap(); // array
     const repoContext: RepoContext = { octokit, owner, repo };
 
@@ -33,7 +33,7 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
 
         if (!llmResponse) {
             console.error("No response from LLM");
-            break;
+            return undefined;
         }
   
         if (llmResponse.type === "final_review") {
@@ -45,7 +45,7 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
 
             if (!toolHandler) { 
                 console.error(`Tool ${llmResponse.tool} not found`);
-                break;
+                return undefined;
             }
   
             const toolResult = await toolHandler(repoContext, ...llmResponse.args);
@@ -54,7 +54,7 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
                 messages.push({ role: 'user', content: toolResult });
             } else {
                 console.error(`Tool ${llmResponse.tool} returned no result`);
-                break;
+                return undefined;
             }
   
             llmResponse = await generateReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
@@ -63,7 +63,7 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
                 messages.push({ role: 'assistant', content: JSON.stringify(llmResponse) });
             } else {
                 console.error(`Error: trouble getting response from model`);
-                break;
+                return undefined;
             }
         }
     }

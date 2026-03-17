@@ -16,8 +16,6 @@ export interface YAMLConfig {
     dependency_review: any;
 }
 
-const userRepoManifestFileData: FileData[] = [];
-
 export async function onPullRequestOpened({ octokit, payload }) {
 
     /// YAML Config Check //////////////////////////////////////////////////////////
@@ -90,6 +88,8 @@ export async function onPullRequestOpened({ octokit, payload }) {
             }
         }
         console.log("---- Files ----\n", files);
+
+        const userRepoManifestFileData: FileData[] = [];
 
         //////// Dependency Checker /////////////////////////
         for (const file of files) {
