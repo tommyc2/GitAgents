@@ -1,17 +1,28 @@
 import { loadToolMap } from "../config/loadToolMap.js";
-import { generateCodeReview } from "./codeReview.js";
 import { toolMap } from '../config/loadToolMap.js';
 import { ToolHandler } from '../config/loadToolMap.js';
 import { RepoContext } from './toolHandlers.js';
+import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
 
-export async function runAgent(config, octokit, owner: string, repo: string, pullNumber: number, commitId: string, files: any[]) {
+type GenerateReviewFn = (
+    config: YAMLConfig,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    commitId: string,
+    files: any[],
+    availableTools: string,
+    messages: any[]
+) => Promise<any>;
+
+export async function runAgent(config: YAMLConfig, octokit, owner: string, repo: string, pullNumber: number, commitId: string, files: any[], generateReview: GenerateReviewFn) {
     const toolUnionString = loadToolMap(); // array
     const repoContext: RepoContext = { octokit, owner, repo };
 
     const messages: any[] = [];
     messages.push({ role: 'user', content: 'Please follow the system instructions.' });
-    
-    let llmResponse = await generateCodeReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
+
+    let llmResponse = await generateReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
 
     if (llmResponse) {
         messages.push({ role: 'assistant', content: JSON.stringify(llmResponse) });
@@ -46,7 +57,7 @@ export async function runAgent(config, octokit, owner: string, repo: string, pul
                 break;
             }
   
-            llmResponse = await generateCodeReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
+            llmResponse = await generateReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
             
             if (llmResponse) {
                 messages.push({ role: 'assistant', content: JSON.stringify(llmResponse) });

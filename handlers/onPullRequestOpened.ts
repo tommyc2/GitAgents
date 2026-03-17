@@ -2,6 +2,7 @@ import { githubApiVersion, packageManifestFiles } from "../config/config.js";
 import { onManifestChange } from "./onManifestChange.js";
 import { fetchYAMLConfig } from "../config/loadYAML.js";
 import { runAgent } from "../agents/runAgent.js";
+import { generateCodeReview } from "../agents/codeReview.js";
 
 interface FileData {
     data: any; // raw file data from GitHub API
@@ -99,11 +100,11 @@ export async function onPullRequestOpened({ octokit, payload }) {
         }
 
         if (userRepoManifestFileData.length > 0) {
-            await onManifestChange(octokit, owner, repo, pullNumber,commitId, userRepoManifestFileData);
+            await onManifestChange(config, octokit, owner, repo, pullNumber,commitId, userRepoManifestFileData);
         }
          ///////////////////////////////////////////////////
 
-        const codeReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, files);
+        const codeReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, files, generateCodeReview);
 
         //console.log(" ----- Code Review ------\n", codeReviewResponse);
 

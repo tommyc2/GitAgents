@@ -1,7 +1,6 @@
-import { claudeClient, openAIClient } from "../config/config.js";
+import { callModel } from "./callModel.js";
 import { codeReviewPrompt } from "../config/systemPrompts.js";
 import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
-//import { claudeClient } from "../config/config.js";
 
 export interface RequestToolResponse {
     type: "request_tool";
@@ -44,32 +43,6 @@ export async function generateCodeReview(
     messages: any[] // conversation history
 ) {
 
-    let response: CodeReviewResponse | null = null;
-
-    if (config.model.provider.toLowerCase() === 'openai') {
-        const gptResponse = await openAIClient.responses.create({
-            model: config.model.name as string,
-            input: [
-                { role: "system", content: codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools) },
-                ...messages
-            ],      
-        });
-        response = JSON.parse(gptResponse.output_text || "Error: trouble getting response from openai");
-    }
-
-    else if (config.model.provider.toLowerCase() === 'claude' || config.model.provider.toLowerCase() === 'anthropic') {
-        const claudeResponse = await claudeClient.messages.create({
-            max_tokens: 1024, //TODO: make this configurable later
-            system: codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools),
-            messages: messages,
-            model: config.model.name as string
-        });
-        response = JSON.parse(claudeResponse.content[0]?.type === 'text' ? claudeResponse.content[0].text : "Error: trouble getting response from claude");
-    }
-    // response validation
-    if (!response) {
-        console.error("Error: trouble getting response from model");
-        return null;
-    }
-    return response;
+    const systemPrompt = codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools);
+    return callModel(config, systemPrompt, messages) as Promise<CodeReviewResponse | null>;
 }
