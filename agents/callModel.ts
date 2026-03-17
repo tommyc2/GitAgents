@@ -2,7 +2,10 @@ import { claudeClient, openAIClient } from "../config/config.js";
 import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
 
 export async function callModel(config: YAMLConfig, systemPrompt: string, messages: any[]): Promise<any> {
-    const provider = config.model.provider.toLowerCase();
+    const modelName = (config.model.name as string) || "";
+    const provider = config.model.provider
+        ? config.model.provider.toLowerCase()
+        : modelName.startsWith("claude") ? "claude" : "openai";
 
     if (provider === 'openai') {
         const response = await openAIClient.responses.create({
