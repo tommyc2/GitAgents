@@ -1,14 +1,30 @@
 import { githubApiVersion, packageManifestFiles } from "../config/config.js";
-import { generateCodeReview } from "../agents/codeReview.js";
 import { onManifestChange } from "./onManifestChange.js";
 import { fetchYAMLConfig } from "../config/loadYAML.js";
+import { runAgent } from "../agents/runAgent.js";
+import { generateCodeReview } from "../agents/codeReview.js";
+import { runFeedbackAgent } from "../agents/feedbackAgent.js";
 
 interface FileData {
     data: any; // raw file data from GitHub API
     content: any; // content of the file
 }
-
-const userRepoManifestFileData: FileData[] = [];
+export interface YAMLConfig {
+    project?: string;
+    model: any;
+    global_config: any;
+    code_review: any;
+    dependency_review: any;
+    feedback?: {
+        enabled: boolean;
+        model: {
+            provider: string;
+            name: string;
+            max_tokens: number;
+            temperature: number;
+        };
+    };
+}
 
 export async function onPullRequestOpened({ octokit, payload }) {
 
@@ -18,10 +34,19 @@ export async function onPullRequestOpened({ octokit, payload }) {
         console.error("Failed to load YAML config");
         throw new Error("Failed to load YAML config");
     }
-    const { model, global_config, code_review, dependency_review } = yamlConfig;
+    const { project, global_config, model, code_review, dependency_review, feedback } = yamlConfig;
     console.log("----- YAML Config -----\n",
-        { model, global_config, code_review, dependency_review },
+        { project, global_config, model, code_review, dependency_review },
         "--------------------------------\n");
+
+    const config: YAMLConfig = {
+        project: project,
+        model: model,
+        global_config: global_config,
+        code_review: code_review,
+        dependency_review: dependency_review,
+        feedback: feedback
+    }
     ////////////////////////////////////////////////////////////////////////////////
 
     console.log(`PR Opened : No.${payload.number} from ${payload.repository.full_name}`);
@@ -75,6 +100,8 @@ export async function onPullRequestOpened({ octokit, payload }) {
         }
         console.log("---- Files ----\n", files);
 
+        const userRepoManifestFileData: FileData[] = [];
+
         //////// Dependency Checker /////////////////////////
         for (const file of files) {
             if (packageManifestFiles.includes(file.data.filename)) {
@@ -84,14 +111,18 @@ export async function onPullRequestOpened({ octokit, payload }) {
         }
 
         if (userRepoManifestFileData.length > 0) {
-            await onManifestChange(octokit, owner, repo, pullNumber,commitId, userRepoManifestFileData);
+            await onManifestChange(config, octokit, owner, repo, pullNumber,commitId, userRepoManifestFileData);
         }
          ///////////////////////////////////////////////////
 
-        const codeReviewResponse = await generateCodeReview(owner, repo, pullNumber, commitId, files);
+        // Initial review by primary agent (draft review)
+        const codeReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, files, generateCodeReview);
 
-        console.log(" ----- Code Review ------\n", codeReviewResponse);
+        //console.log(" ----- Code Review ------\n", codeReviewResponse);
 
-        await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', codeReviewResponse);
+        // Feedback review by feedback agent (final review)
+        const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, files, codeReviewResponse);
+
+        await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
     }
 }

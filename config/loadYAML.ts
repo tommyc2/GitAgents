@@ -16,7 +16,7 @@ export async function fetchYAMLConfig(octokit,
     
     const defaultBranch = repoResponse.data.default_branch || 'main';
     
-    const response  = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}?ref={branch}', {
+    const response  = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
         owner: owner,
         repo: repo,
         path: 'agents.config.yaml',
@@ -28,14 +28,15 @@ export async function fetchYAMLConfig(octokit,
         const content: string = convertBase64ToString(data.content)
         const fullYamlConfig = parseYAML(content) as Record<string, any>;
         
-        const { project, global_config, model, code_review, dependency_review } = fullYamlConfig;
+        const { project, global_config, model, code_review, dependency_review, feedback } = fullYamlConfig;
 
-        return { 
+        return {
             project,
             global_config,
             model,
             code_review,
-            dependency_review 
+            dependency_review,
+            feedback
         };
     }
     else {

@@ -1,51 +1,48 @@
-import { openAIClient } from "../config/config.js";
+import { callModel } from "./callModel.js";
 import { codeReviewPrompt } from "../config/systemPrompts.js";
-//import { claudeClient } from "../config/config.js";
+import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
 
-interface CodeReviewResponse {
-    owner: string;
-    repo: string;
-    pull_number: number;
-    commit_id: string;
+export interface RequestToolResponse {
+    type: "request_tool";
+    tool: string;
+    args?: any;
+}
+export interface ReviewComment {
+    path: string;
+    line: number;
+    side: "LEFT" | "RIGHT";
     body: string;
-    event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
-    comments: {
-        path: string;
-        line: number;
-        side: "LEFT" | "RIGHT";
+}
+
+export interface FinalReviewResponse {
+    type: "final_review";
+    content: {
+        owner: string;
+        repo: string;
+        pull_number: number;
+        commit_id: string;
         body: string;
-    }[];
-    headers: {
-        "X-GitHub-Api-Version": string;
+        event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+        comments: ReviewComment[];
+        headers: {
+            "X-GitHub-Api-Version": string;
+        };
     };
 }
 
+export type CodeReviewResponse = RequestToolResponse | FinalReviewResponse;
+
 export async function generateCodeReview(
+    config: YAMLConfig,
     owner: string,
     repo: string,
     pullNumber: number,
     commitId: string,
-    files: any[] // FileData[] later,
+    files: any[], // FileData[] later,
+    availableTools,
+    messages: any[] // conversation history
 ) {
-    const gptResponse = await openAIClient.responses.create({
-        model: 'gpt-5.2-codex', // TODO: hardcoded for now, will change later to opus etc
-        input: codeReviewPrompt(owner, repo, pullNumber, commitId, files)
-    });
 
-    /* const claudeResponse = await claudeClient.messages.create({
-        max_tokens: 1024,
-        system: codeReviewPrompt(owner, repo, pullNumber, commitId, files),
-        messages: [{ role: 'user', content: 'Please follow the system instructions.' }],
-        model: 'claude-sonnet-4-5-20250929',// TODO: hardcoded for now, will change later to opus etc
-    });
-    */
-      
-    //console.log("\n ---- Claude Response ------\n")
-    //console.log(claudeResponse.content[0]);
-
-    //const outputText = claudeResponse.content[0]?.type === 'text' ? claudeResponse.content[0].text : "No response from Claude";
-    const gptOutputText = gptResponse.output_text ?? "No response from GPT";
-
-    return JSON.parse(gptOutputText) as CodeReviewResponse;
-
+    const systemPrompt = codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools);
+    return callModel(config, systemPrompt, messages) as Promise<CodeReviewResponse | null>;
 }

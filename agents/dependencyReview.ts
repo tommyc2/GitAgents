@@ -1,5 +1,6 @@
-import { openAIClient } from "../config/config.js";
+import { callModel } from "./callModel.js";
 import { dependencyReviewPrompt } from "../config/systemPrompts.js";
+import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
 
 interface DependencyReviewResponse {
     owner: string;
@@ -13,11 +14,16 @@ interface DependencyReviewResponse {
     };
 }
 
-export async function generateDependencyReview(owner: string, repo: string, pullNumber: number, commitId: string, manifestFileData: any[]) {
-    const gptResponse = await openAIClient.responses.create({
-        model: 'gpt-5.2-codex', // TODO: hardcoded for now, will change later to opus etc
-        input: dependencyReviewPrompt(owner, repo, pullNumber, commitId, manifestFileData)
-    });
-
-    return JSON.parse(gptResponse.output_text) as DependencyReviewResponse;
+export async function generateDependencyReview(
+    config: YAMLConfig,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    commitId: string,
+    manifestFileData: any[],
+    availableTools: string,
+    messages: any[]
+) {
+    const systemPrompt = dependencyReviewPrompt(owner, repo, pullNumber, commitId, manifestFileData, availableTools);
+    return callModel(config, systemPrompt, messages) as Promise<DependencyReviewResponse | null>;
 }
