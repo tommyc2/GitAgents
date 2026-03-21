@@ -3,6 +3,7 @@ import { onManifestChange } from "./onManifestChange.js";
 import { fetchYAMLConfig } from "../config/loadYAML.js";
 import { runAgent } from "../agents/runAgent.js";
 import { generateCodeReview } from "../agents/codeReview.js";
+import { runFeedbackAgent } from "../agents/feedbackAgent.js";
 
 interface FileData {
     data: any; // raw file data from GitHub API
@@ -14,6 +15,15 @@ export interface YAMLConfig {
     global_config: any;
     code_review: any;
     dependency_review: any;
+    feedback?: {
+        enabled: boolean;
+        model: {
+            provider: string;
+            name: string;
+            max_tokens: number;
+            temperature: number;
+        };
+    };
 }
 
 export async function onPullRequestOpened({ octokit, payload }) {
@@ -24,7 +34,7 @@ export async function onPullRequestOpened({ octokit, payload }) {
         console.error("Failed to load YAML config");
         throw new Error("Failed to load YAML config");
     }
-    const { project, global_config, model, code_review, dependency_review } = yamlConfig;
+    const { project, global_config, model, code_review, dependency_review, feedback } = yamlConfig;
     console.log("----- YAML Config -----\n",
         { project, global_config, model, code_review, dependency_review },
         "--------------------------------\n");
@@ -34,7 +44,8 @@ export async function onPullRequestOpened({ octokit, payload }) {
         model: model,
         global_config: global_config,
         code_review: code_review,
-        dependency_review: dependency_review
+        dependency_review: dependency_review,
+        feedback: feedback
     }
     ////////////////////////////////////////////////////////////////////////////////
 
@@ -104,10 +115,14 @@ export async function onPullRequestOpened({ octokit, payload }) {
         }
          ///////////////////////////////////////////////////
 
+        // Initial review by primary agent (draft review)
         const codeReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, files, generateCodeReview);
 
         //console.log(" ----- Code Review ------\n", codeReviewResponse);
 
-        await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', codeReviewResponse);
+        // Feedback review by feedback agent (final review)
+        const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, files, codeReviewResponse);
+
+        await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
     }
 }

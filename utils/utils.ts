@@ -27,3 +27,8 @@ export function isNotNull(value: any): boolean {
 export function parseYAML(input: string) {
     return yaml.load(input);
 }
+
+export function stripCodeFences(text: string): string {
+    const match = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+    return match ? match[1] ?? text : text;
+}

@@ -62,6 +62,63 @@ Review guidelines:
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `
 
+export const feedbackReviewPrompt = (
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  commitId: string,
+  files: any[],
+  primaryReview: any): string => `
+You are a senior code review verifier.
+
+A primary review agent has already reviewed the following changed files:
+
+${JSON.stringify(files)}
+
+The primary agent produced this review:
+
+${JSON.stringify(primaryReview)}
+
+Your job:
+1. Verify the primary review is accurate — are the comments correct? Are there false positives?
+2. Check if the primary review missed any bugs, security issues, or logical errors in the changed files.
+3. If the primary review is good, return it unchanged.
+4. If corrections or additions are needed, return a refined version.
+
+Return **only** a valid JSON object with this shape:
+{
+  "type": "final_review",
+  "content": {
+    "owner": "${owner}",
+    "repo": "${repo}",
+    "pull_number": "${pullNumber}",
+    "commit_id": "${commitId}",
+    "body": "",
+    "event": "REQUEST_CHANGES" | "COMMENT" | "APPROVE",
+    "comments": [
+      {
+        "path": "",
+        "line": <number>,
+        "side": "LEFT" | "RIGHT",
+        "body": ""
+      }
+    ],
+    "headers": {
+      "X-GitHub-Api-Version": "${githubApiVersion}"
+    }
+  }
+}
+
+Guidelines:
+- Do not weaken the primary review. Only strengthen or confirm it.
+- If the primary review is accurate and complete, return it as-is.
+- If you find issues the primary review missed, add them.
+- If the primary review contains incorrect comments, remove or correct them.
+- Keep the same JSON structure so the result can be posted directly to GitHub.
+
+Respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
+`
+
 export const dependencyReviewPrompt = (
   owner: string,
   repo: string,

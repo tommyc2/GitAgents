@@ -29,7 +29,10 @@ app.webhooks.on("pull_request.opened", onPullRequestOpened);
 // checking for errors on webhook trigger
 app.webhooks.onError((error) => {
   if (error.name === "AggregateError") {
-    console.error(`Error processing request: ${error.event}`);
+    console.error(`Error processing request for event: ${error.event.name}`);
+    for (const e of (error as AggregateError).errors) {
+      console.error(e);
+    }
   } else {
     console.error(error);
   }

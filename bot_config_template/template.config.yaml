@@ -34,3 +34,11 @@ dependency_review:
     # - "go.mod"
     # - "requirements.txt"
   risk_tolerance: "medium"  # "low", "medium", "high"
+
+feedback:
+  enabled: true
+  model:
+    provider: "anthropic"
+    name: "claude-sonnet-4-6"
+    max_tokens: 4096
+    temperature: 0.1
