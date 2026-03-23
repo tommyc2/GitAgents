@@ -1,7 +1,5 @@
 import { searchCodebaseTool } from '../agents/toolHandlers.js';
-
-export type ToolHandler = (...args: unknown[]) => unknown;
-export type ToolMap = Map<string, ToolHandler>;
+import { ToolHandler, ToolMap } from '../types/index.js';
 
 const tools: [string, ToolHandler][] = [
     //TODO: Add more tools here

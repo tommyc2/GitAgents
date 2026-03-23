@@ -1,6 +1,6 @@
 import { callModel } from "./callModel.js";
 import { feedbackReviewPrompt } from "../config/systemPrompts.js";
-import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
+import { YAMLConfig } from "../types/index.js";
 
 export async function runFeedbackAgent(
     config: YAMLConfig,

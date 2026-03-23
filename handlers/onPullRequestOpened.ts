@@ -4,27 +4,7 @@ import { fetchYAMLConfig } from "../config/loadYAML.js";
 import { runAgent } from "../agents/runAgent.js";
 import { generateCodeReview } from "../agents/codeReview.js";
 import { runFeedbackAgent } from "../agents/feedbackAgent.js";
-
-interface FileData {
-    data: any; // raw file data from GitHub API
-    content: any; // content of the file
-}
-export interface YAMLConfig {
-    project?: string;
-    model: any;
-    global_config: any;
-    code_review: any;
-    dependency_review: any;
-    feedback?: {
-        enabled: boolean;
-        model: {
-            provider: string;
-            name: string;
-            max_tokens: number;
-            temperature: number;
-        };
-    };
-}
+import { FileData, YAMLConfig } from "../types/index.js";
 
 export async function onPullRequestOpened({ octokit, payload }) {
 

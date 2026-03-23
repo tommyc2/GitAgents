@@ -1,18 +1,6 @@
 import { callModel } from "./callModel.js";
 import { dependencyReviewPrompt } from "../config/systemPrompts.js";
-import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
-
-interface DependencyReviewResponse {
-    owner: string;
-    repo: string;
-    pull_number: number;
-    commit_id: string;
-    body: string;
-    event: "COMMENT";
-    headers: {
-        "X-GitHub-Api-Version": string;
-    };
-}
+import { YAMLConfig, DependencyReviewResponse } from "../types/index.js";
 
 export async function generateDependencyReview(
     config: YAMLConfig,

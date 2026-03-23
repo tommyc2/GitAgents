@@ -1,10 +1,5 @@
 import { convertBase64ToString } from '../utils/utils.js';
-
-export interface RepoContext {
-    octokit: any;
-    owner: string;
-    repo: string;
-}
+import { RepoContext } from '../types/index.js';
 
 export async function searchCodebaseTool(context: RepoContext, query: string): Promise<string> {
     const searchResponse = await context.octokit.request('GET /search/code', {

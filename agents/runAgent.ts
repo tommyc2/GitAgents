@@ -1,19 +1,6 @@
 import { loadToolMap } from "../config/loadToolMap.js";
 import { toolMap } from '../config/loadToolMap.js';
-import { ToolHandler } from '../config/loadToolMap.js';
-import { RepoContext } from './toolHandlers.js';
-import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
-
-type GenerateReviewFn = (
-    config: YAMLConfig,
-    owner: string,
-    repo: string,
-    pullNumber: number,
-    commitId: string,
-    files: any[],
-    availableTools: string,
-    messages: any[]
-) => Promise<any>;
+import { ToolHandler, RepoContext, YAMLConfig, GenerateReviewFn } from '../types/index.js';
 
 export async function runAgent(config: YAMLConfig, octokit, owner: string, repo: string, pullNumber: number, commitId: string, files: any[], generateReview: GenerateReviewFn): Promise<any> {
     const toolUnionString = loadToolMap(); // array
