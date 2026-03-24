@@ -29,7 +29,7 @@ Return **only** a valid JSON Object following one of the two shapes below:
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
-    "pull_number": "${pullNumber}",
+    "pull_number": ${pullNumber},
     "commit_id": "${commitId}",
     "body": "", // Required if event is REQUEST_CHANGES or COMMENT. This is the main review message.
     "event": "REQUEST_CHANGES" | "COMMENT" | "APPROVE",
@@ -91,7 +91,7 @@ Return **only** a valid JSON object with this shape:
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
-    "pull_number": "${pullNumber}",
+    "pull_number": ${pullNumber},
     "commit_id": "${commitId}",
     "body": "",
     "event": "REQUEST_CHANGES" | "COMMENT" | "APPROVE",
@@ -147,7 +147,7 @@ Return **only** a valid JSON object following one of the two shapes below:
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
-    "pull_number": "${pullNumber}",
+    "pull_number": ${pullNumber},
     "commit_id": "${commitId}",
     "body": "Summary of the conflict risks. Use appropriate emojis for each type of risk identified.",
     "event": "COMMENT",

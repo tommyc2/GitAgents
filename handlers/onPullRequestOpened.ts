@@ -48,16 +48,13 @@ export async function onPullRequestOpened({ octokit, payload }) {
     //console.log(JSON.stringify(response));
     if (response) {
         const data = response.data;
-        console.log("Response: ", response);
+        console.log("fetch PR files Response: ", response);
         const files: FileData[] = [];
 
-        
         const { token } = await octokit.auth({ type: "installation" }); // https://stackoverflow.com/questions/60161028/how-do-you-authenticate-a-github-app-in-node-js
 
-        console.log("Token: ", token);
-
         for (const file of data) {
-            if (file) {
+            if (file.status !== "removed") {
                 const response = await fetch(file.contents_url, {
                     headers: {
                         'X-GitHub-Api-Version': `${githubApiVersion}`,
