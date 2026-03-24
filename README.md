@@ -1,3 +1,5 @@
+<img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/31d42525-f61c-4b5e-bc2a-760f179354b4" />
+
 # GitAgents - A Multi-Agent Repository Management Tool
 *Developed by Tommy Condon*
 
