@@ -1,5 +1,5 @@
 import { claudeClient, openAIClient } from "../config/config.js";
-import { YAMLConfig } from "../handlers/onPullRequestOpened.js";
+import { YAMLConfig } from "../types/index.js";
 import { stripCodeFences } from "../utils/utils.js";
 
 export async function callModel(config: YAMLConfig, systemPrompt: string, messages: any[]): Promise<any> {

@@ -14,5 +14,3 @@ export const openAIClient = new OpenAI({
 export const claudeClient = new Anthropic({
     apiKey: process.env['ANTHROPIC_API_KEY'] as string, // https://github.com/anthropics/anthropic-sdk-typescript
 });
-
-export const packageManifestFiles = ['package-lock.json'];

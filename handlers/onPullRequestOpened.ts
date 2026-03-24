@@ -1,30 +1,10 @@
-import { githubApiVersion, packageManifestFiles } from "../config/config.js";
+import { githubApiVersion } from "../config/config.js";
 import { onManifestChange } from "./onManifestChange.js";
 import { fetchYAMLConfig } from "../config/loadYAML.js";
 import { runAgent } from "../agents/runAgent.js";
 import { generateCodeReview } from "../agents/codeReview.js";
 import { runFeedbackAgent } from "../agents/feedbackAgent.js";
-
-interface FileData {
-    data: any; // raw file data from GitHub API
-    content: any; // content of the file
-}
-export interface YAMLConfig {
-    project?: string;
-    model: any;
-    global_config: any;
-    code_review: any;
-    dependency_review: any;
-    feedback?: {
-        enabled: boolean;
-        model: {
-            provider: string;
-            name: string;
-            max_tokens: number;
-            temperature: number;
-        };
-    };
-}
+import { FileData, YAMLConfig } from "../types/index.js";
 
 export async function onPullRequestOpened({ octokit, payload }) {
 
@@ -36,7 +16,7 @@ export async function onPullRequestOpened({ octokit, payload }) {
     }
     const { project, global_config, model, code_review, dependency_review, feedback } = yamlConfig;
     console.log("----- YAML Config -----\n",
-        { project, global_config, model, code_review, dependency_review },
+        project, "\n", global_config, "\n", model, "\n", code_review, "\n", dependency_review, "\n", feedback, "\n",
         "--------------------------------\n");
 
     const config: YAMLConfig = {
@@ -100,17 +80,25 @@ export async function onPullRequestOpened({ octokit, payload }) {
         }
         console.log("---- Files ----\n", files);
 
+        //////// Dependency Checker /////////////////////////
+
         const userRepoManifestFileData: FileData[] = [];
 
-        //////// Dependency Checker /////////////////////////
         for (const file of files) {
-            if (packageManifestFiles.includes(file.data.filename)) {
+            if (config.dependency_review?.manifest_files?.includes(file.data.filename)) {
                 console.log("Package manifest file found: ", file.data.filename);
                 userRepoManifestFileData.push(file);
             }
         }
 
-        if (userRepoManifestFileData.length > 0) {
+        if (!config.dependency_review) {
+            console.log(`Dependency review is not configured`);
+        }
+        else if (!config.dependency_review.enabled) {
+            console.log(`Dependency review is disabled, skipping...`);
+        }
+
+        if (config.dependency_review?.enabled && userRepoManifestFileData.length > 0) {
             await onManifestChange(config, octokit, owner, repo, pullNumber,commitId, userRepoManifestFileData);
         }
          ///////////////////////////////////////////////////

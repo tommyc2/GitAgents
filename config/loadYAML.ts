@@ -16,7 +16,7 @@ export async function fetchYAMLConfig(octokit,
     
     const defaultBranch = repoResponse.data.default_branch || 'main';
     
-    const response  = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+    const response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
         owner: owner,
         repo: repo,
         path: 'agents.config.yaml',

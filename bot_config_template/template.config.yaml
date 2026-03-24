@@ -13,13 +13,10 @@ model:
   temperature: 0.2
 
 code_review:
-  tone: "constructive"  # "constructive", "strict", "concise", "educational"
+  tone: "concise"  # "constructive", "strict", "concise", "educational"
   focus:
     - "correctness"
     - "security"
-    # - "performance"
-    # - "readability"
-    # - "testing"
   ignore_patterns:
     - "*.min.js"
     - "dist/**"
