@@ -1,5 +1,53 @@
-// system prompts for the agents
+// system prompts and message templates for the agents
 import { githubApiVersion } from "./config.js";
+
+export const missingConfigBody = `
+### Missing Configuration File
+
+This repository does not have an \`agents.config.yaml\` file on the default branch. GitAgents requires this file to run.
+
+Please create an \`agents.config.yaml\` file in the root of your repository using a similar template to the one below:
+
+\`\`\`yaml
+project:
+  name: "my-repo"
+  description: "Brief description of the repository"
+
+global_config:
+  language: "en"
+
+model:
+  provider: "openai" # MANDATORY: The provider of the model to use for the agents.
+  name: "gpt-5.4" #  MANDATORY: The model to use for the agents.
+  max_tokens: 4096 # MANDATORY: The maximum number of tokens for the model to generate in its response.
+  temperature: 0.2
+
+code_review:
+  tone: "concise"
+  focus:
+    - "correctness"
+    - "security"
+  ignore_patterns:
+    - "*.min.js"
+    - "dist/**"
+
+dependency_review:
+  enabled: true
+  manifest_files:
+    - "package.json"
+    - "package-lock.json"
+  risk_tolerance: "medium"
+
+feedback:
+  enabled: true
+  model:
+    provider: "anthropic"
+    name: "claude-sonnet-4-6"
+    max_tokens: 4096
+    temperature: 0.1
+\`\`\`
+
+Once the file is committed to the default branch, close and re-open this PR to trigger a review.`;
 
 export const codeReviewPrompt = (
   owner: string,
@@ -29,7 +77,7 @@ Return **only** a valid JSON Object following one of the two shapes below:
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
-    "pull_number": "${pullNumber}",
+    "pull_number": ${pullNumber},
     "commit_id": "${commitId}",
     "body": "", // Required if event is REQUEST_CHANGES or COMMENT. This is the main review message.
     "event": "REQUEST_CHANGES" | "COMMENT" | "APPROVE",
@@ -91,7 +139,7 @@ Return **only** a valid JSON object with this shape:
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
-    "pull_number": "${pullNumber}",
+    "pull_number": ${pullNumber},
     "commit_id": "${commitId}",
     "body": "",
     "event": "REQUEST_CHANGES" | "COMMENT" | "APPROVE",
@@ -147,7 +195,7 @@ Return **only** a valid JSON object following one of the two shapes below:
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
-    "pull_number": "${pullNumber}",
+    "pull_number": ${pullNumber},
     "commit_id": "${commitId}",
     "body": "Summary of the conflict risks. Use appropriate emojis for each type of risk identified.",
     "event": "COMMENT",

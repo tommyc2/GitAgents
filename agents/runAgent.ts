@@ -23,11 +23,11 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
             return undefined;
         }
   
-        if (llmResponse.type === "final_review") {
+        else if (llmResponse.type === "final_review") {
             return llmResponse.content;
         }
   
-        if (llmResponse.type === "request_tool") {
+        else if (llmResponse.type === "request_tool") {
             const toolHandler: ToolHandler | undefined = toolMap.get(llmResponse.tool);
 
             if (!toolHandler) { 
@@ -52,6 +52,10 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
                 console.error(`Error: trouble getting response from model`);
                 return undefined;
             }
+        }
+        else {
+            console.error("Unknown response type: ", llmResponse.type ?? "No type");
+            return undefined;
         }
     }
   

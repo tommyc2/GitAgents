@@ -32,3 +32,18 @@ export function stripCodeFences(text: string): string {
     const match = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
     return match ? match[1] ?? text : text;
 }
+
+export async function postInformativeComment(
+    octokit: any,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    body: string
+): Promise<void> {
+    await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
+        owner,
+        repo,
+        issue_number: pullNumber,
+        body,
+    });
+}

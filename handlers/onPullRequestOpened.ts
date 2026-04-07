@@ -5,35 +5,35 @@ import { runAgent } from "../agents/runAgent.js";
 import { generateCodeReview } from "../agents/codeReview.js";
 import { runFeedbackAgent } from "../agents/feedbackAgent.js";
 import { FileData, YAMLConfig } from "../types/index.js";
+import { postInformativeComment } from "../utils/utils.js";
+import { missingConfigBody } from "../config/systemPrompts.js";
 
 export async function onPullRequestOpened({ octokit, payload }) {
 
-    /// YAML Config Check //////////////////////////////////////////////////////////
-    const yamlConfig = await fetchYAMLConfig(octokit, payload.repository.owner.login, payload.repository.name);
-    if (!yamlConfig) {
-        console.error("Failed to load YAML config");
-        throw new Error("Failed to load YAML config");
-    }
-    const { project, global_config, model, code_review, dependency_review, feedback } = yamlConfig;
-    console.log("----- YAML Config -----\n",
-        project, "\n", global_config, "\n", model, "\n", code_review, "\n", dependency_review, "\n", feedback, "\n",
-        "--------------------------------\n");
-
-    const config: YAMLConfig = {
-        project: project,
-        model: model,
-        global_config: global_config,
-        code_review: code_review,
-        dependency_review: dependency_review,
-        feedback: feedback
-    }
-    ////////////////////////////////////////////////////////////////////////////////
-
-    console.log(`PR Opened : No.${payload.number} from ${payload.repository.full_name}`);
-    
     const owner: string = payload.repository.owner.login;
     const repo: string = payload.repository.name;
     const pullNumber: number = payload.number;
+
+    console.log(`PR Opened : No.${pullNumber} from ${payload.repository.full_name}`);
+
+    /// YAML Config Check //////////////////////////////////////////////////////////
+    const yamlConfig = await fetchYAMLConfig(octokit, owner, repo);
+    if (!yamlConfig) {
+        console.error("Failed to load YAML config");
+        await postInformativeComment(octokit, owner, repo, pullNumber, missingConfigBody);
+        return;
+    }
+
+    if (!yamlConfig.model?.name) {
+        console.error("YAML config is missing required 'model.name' field");
+        await postInformativeComment(octokit, owner, repo, pullNumber,
+            "### Invalid Configuration\n\nYour `agents.config.yaml` is missing the required `model.name` field. Please check your configuration.");
+        return;
+    }
+
+    const config: YAMLConfig = yamlConfig;
+    console.log("----- YAML Config -----\n", JSON.stringify(config, null, 2), "\n--------------------------------\n");
+    ////////////////////////////////////////////////////////////////////////////////
     const commitId: string = payload.pull_request.head.sha;
 
     const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
@@ -48,16 +48,13 @@ export async function onPullRequestOpened({ octokit, payload }) {
     //console.log(JSON.stringify(response));
     if (response) {
         const data = response.data;
-        console.log("Response: ", response);
+        console.log("fetch PR files Response: ", response);
         const files: FileData[] = [];
 
-        
         const { token } = await octokit.auth({ type: "installation" }); // https://stackoverflow.com/questions/60161028/how-do-you-authenticate-a-github-app-in-node-js
 
-        console.log("Token: ", token);
-
         for (const file of data) {
-            if (file) {
+            if (file.status !== "removed") {
                 const response = await fetch(file.contents_url, {
                     headers: {
                         'X-GitHub-Api-Version': `${githubApiVersion}`,
