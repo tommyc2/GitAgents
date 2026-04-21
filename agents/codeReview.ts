@@ -8,9 +8,9 @@ export async function generateCodeReview(
     repo: string,
     pullNumber: number,
     commitId: string,
-    files: any[], // FileData[] later,
+    files: any[],
     availableTools,
-    messages: any[] // conversation history
+    messages: any[]
 ) {
 
     const systemPrompt = codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools);

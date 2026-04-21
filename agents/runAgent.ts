@@ -3,7 +3,7 @@ import { toolMap } from '../config/loadToolMap.js';
 import { ToolHandler, RepoContext, YAMLConfig, GenerateReviewFn } from '../types/index.js';
 
 export async function runAgent(config: YAMLConfig, octokit, owner: string, repo: string, pullNumber: number, commitId: string, files: any[], generateReview: GenerateReviewFn): Promise<any> {
-    const toolUnionString = loadToolMap(); // array
+    const toolUnionString = loadToolMap();
     const repoContext: RepoContext = { octokit, owner, repo };
 
     const messages: any[] = [];
@@ -47,7 +47,10 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
             llmResponse = await generateReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
             
             if (llmResponse) {
-                messages.push({ role: 'assistant', content: JSON.stringify(llmResponse) });
+                messages.push({
+                    role: 'assistant',
+                    content: JSON.stringify(llmResponse)
+                });
             } else {
                 console.error(`Error: trouble getting response from model`);
                 return undefined;
@@ -58,6 +61,4 @@ export async function runAgent(config: YAMLConfig, octokit, owner: string, repo:
             return undefined;
         }
     }
-  
-
 }

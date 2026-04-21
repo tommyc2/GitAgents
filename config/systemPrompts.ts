@@ -18,7 +18,7 @@ global_config:
 
 model:
   provider: "openai" # MANDATORY: The provider of the model to use for the agents.
-  name: "gpt-5.4" #  MANDATORY: The model to use for the agents.
+  name: "gpt-5.4" # MANDATORY: The model to use for the agents.
   max_tokens: 4096 # MANDATORY: The maximum number of tokens for the model to generate in its response.
   temperature: 0.2
 
@@ -49,6 +49,7 @@ feedback:
 
 Once the file is committed to the default branch, close and re-open this PR to trigger a review.`;
 
+// Code Review Agent Prompt
 export const codeReviewPrompt = (
   owner: string,
   repo: string,
@@ -56,7 +57,7 @@ export const codeReviewPrompt = (
   commitId: string,
   files: any[],
   availableTools: string): string => `
-You are a code review expert.
+You are a Senior Code Review Expert.
 
 Review the changed files below:
 
@@ -86,7 +87,7 @@ Return **only** a valid JSON Object following one of the two shapes below:
         "path": "", // REQUIRED: file path in repo
         "line": <number>, // REQUIRED: diff line position (must be a number, not a string)
         "side": "LEFT" | "RIGHT", // REQUIRED: diff line side (must be a string, not a number)
-        "body": "Short, constructive comment (e.g., 'Could we simplify this?' or 'Why is this needed?')" // Required
+        "body": // REQUIRED: "Short, constructive comment (e.g., 'Could we simplify this?' or 'Why is this needed?')"
       }
       // Add more comments if needed here
     ],
@@ -100,16 +101,16 @@ Review guidelines:
 
 - Be concise, constructive, and helpful.
 - Prioritize correctness, clarity, and maintainability.
-- Use "APPROVE" if the code is solid; include a short, positive message.
+- Use "APPROVE" if the code is robust and solid and include a short message (e.g., 'lgtm' command to approve PR).
 - Use "COMMENT" for non-blocking suggestions or observations.
-- Use "REQUEST_CHANGES" if critical issues must be addressed before merging.
-- Only add line-level comments when necessary and actionable.
-- If there are any bugs or possible errors, report them in your review. Don't be afraid to check if the user has submitted invalid code e.g. .clear() function does exist in JavaScript
-- If you are setting the event to 'APPROVE', the main body field should have a value of 'lgtm'
+- Use "REQUEST_CHANGES" if critical issues MUST be addressed before merging.
+- Only add line-level comments when necessary. Keep these to a minimum. For example, keep comments to a maximum of 5.
+- If there are any bugs or errors, report them in your review.
+- If you are setting the event to 'APPROVE', the main body field should have a value of 'lgtm'.
 
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `
-
+// Feedback Agent Prompt
 export const feedbackReviewPrompt = (
   owner: string,
   repo: string,
@@ -117,21 +118,25 @@ export const feedbackReviewPrompt = (
   commitId: string,
   files: any[],
   primaryReview: any): string => `
-You are a senior code review verifier.
+You are a senior code review verifier in a Quality engineering department.
 
-A primary review agent has already reviewed the following changed files:
+A primary review agent has already reviewed the following changed files below:
 
+---
 ${JSON.stringify(files)}
+---
 
-The primary agent produced this review:
+The primary agent produced this review below:
 
+---
 ${JSON.stringify(primaryReview)}
+---
 
 Your job:
-1. Verify the primary review is accurate — are the comments correct? Are there false positives?
+1. Verify the primary review and analyse the code meticulously for hidden bugs, edge cases, etc.
 2. Check if the primary review missed any bugs, security issues, or logical errors in the changed files.
 3. If the primary review is good, return it unchanged.
-4. If corrections or additions are needed, return a refined version.
+4. If modifications are needed, return a refined version.
 
 Return **only** a valid JSON object with this shape:
 {
@@ -159,7 +164,7 @@ Return **only** a valid JSON object with this shape:
 
 Guidelines:
 - Do not weaken the primary review. Only strengthen or confirm it.
-- If the primary review is accurate and complete, return it as-is.
+- If the primary review is accurate and complete, there is no need to modify it. Return it as is.
 - If you find issues the primary review missed, add them.
 - If the primary review contains incorrect comments, remove or correct them.
 - Keep the same JSON structure so the result can be posted directly to GitHub.
@@ -174,7 +179,7 @@ export const dependencyReviewPrompt = (
   commitId: string,
   manifestFileData: any[],
   availableTools: string): string => `
-You are a dependency review expert.
+You are a dependency conflict expert.
 
 Review the changed manifest files below specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
 
@@ -206,7 +211,8 @@ Return **only** a valid JSON object following one of the two shapes below:
 }
 
 Guidelines:
-- Focus ONLY on dependency manifest files (e.g., package.json, package-lock.json, pom.xml, go.mod).
+
+- Focus **ONLY** on dependency manifest files (e.g., package.json, package-lock.json, pom.xml, go.mod, etc).
 - Look for potential conflicts that could or will occur (e.g., mismatched peer dependencies, major version jumps without migration).
 - Always use "COMMENT" as the event.
 - Do not include a 'comments' field in the content.

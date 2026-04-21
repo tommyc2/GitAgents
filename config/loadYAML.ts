@@ -3,9 +3,7 @@ import { githubApiVersion } from "./config.js";
 import { parseYAML } from "../utils/utils.js";
 import { YAMLConfig } from "../types/index.js";
 
-export async function fetchYAMLConfig(octokit,
-    owner: string,
-    repo: string) {
+export async function fetchYAMLConfig(octokit, owner: string, repo: string) {
 
     const repoResponse = await octokit.request('GET /repos/{owner}/{repo}', {
         owner: owner,
@@ -30,7 +28,7 @@ export async function fetchYAMLConfig(octokit,
         return null;
     }
 
-    if (response.status == 200){
+    if (response.status == 200) {
         const data = response.data;
         const content: string = convertBase64ToString(data.content)
         const fullYamlConfig = parseYAML(content) as YAMLConfig;

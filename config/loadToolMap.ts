@@ -2,7 +2,7 @@ import { searchCodebaseTool } from '../agents/toolHandlers.js';
 import { ToolHandler, ToolMap } from '../types/index.js';
 
 const tools: [string, ToolHandler][] = [
-    //TODO: Add more tools here
+    // Note for user: Add more tools here
     ["search_codebase", searchCodebaseTool]
 ];
 
