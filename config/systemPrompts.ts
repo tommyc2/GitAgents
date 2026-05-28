@@ -99,6 +99,12 @@ Return **only** a valid JSON Object following one of the two shapes below:
 
 Review guidelines:
 
+- In the **main body** of your review, make sure to assign a risk score to the PR. e.g. 1-10. A rubric can be found below:
+  Risk score rubric (use appropriate colored emoji for each):                                                                                                                      
+    1-3 (low): docs, comments, trivial refactors, formatting.                                                                                                                 
+    4-6 (medium): standard feature work, isolated bug fixes, new self-contained modules.                                                                                      
+    7-8 (high): touches auth, payments, data migrations, shared infrastructure, or adds significant new surface area.                                                         
+    9-10 (critical): breaks a public API, introduces a security issue, or modifies production-critical logic with no tests. 
 - Be concise, constructive, and helpful.
 - Prioritize correctness, clarity, and maintainability.
 - Use "APPROVE" if the code is robust and solid and include a short message (e.g., 'lgtm' command to approve PR).
