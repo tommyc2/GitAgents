@@ -29,6 +29,13 @@ export interface RepoContext {
     repo: string;
 }
 
+export interface ReviewIdentifiers {
+    owner: string;
+    repo: string;
+    pullNumber: number;
+    commitId: string;
+}
+
 export interface FileData {
     data: any; // raw file data from GitHub API
     content: any; // content of the file

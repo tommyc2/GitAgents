@@ -1,9 +1,8 @@
 <img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/31d42525-f61c-4b5e-bc2a-760f179354b4" />
 
-# GitAgents - A Multi-Agent Repository Management Tool
-*Developed by Tommy Condon*
+# GitAgents GitHub App - A Multi-Agent Repository Management Tool
 
-Git Agents is a GitHub App that uses AI agents to review your pull requests. When a PR is opened, the app can execute a Code Review Agent and (optionally) a Dependency Review Agent, passing the results through a Feedback Agent before posting the final review on GitHub.
+Git Agents is a GitHub App that uses AI agents to review your pull requests. When a PR is opened, the app can execute a Code Review Agent and (optionally) a Dependency Review Agent, passing the results through a Feedback Agent before posting the final review on GitHub. **This README summarizes the GitHub app functionality.**
 
 It supports both OpenAI and Anthropic (Claude) models. You can configure which model to use and how the agents behave through a YAML config file in your repository.
 
