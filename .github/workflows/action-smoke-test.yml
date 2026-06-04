@@ -1,0 +1,24 @@
+name: Action Smoke Test
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  smoke:
+    # Fork PRs receive a read-only GITHUB_TOKEN and have no access to secrets,
+    # so the review post would fail. Only run for PRs from this repository.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run GitAgents (local build)
+        uses: ./
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
