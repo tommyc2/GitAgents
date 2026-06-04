@@ -69,7 +69,8 @@ TEST-results.xml
 .env.local
 .env.production
 .env.*
-dist/
+dist/*
+!dist/action/
 build/
 .vscode
 .cursor/
@@ -95,12 +96,3 @@ __pycache__/
 .yarn/cache/
 example_pull_request_payload.txt
 example_response.json
-/*.md
-!/README.md
-!/CONTRIBUTING.md
-!/LICENSE.md
-!/FEEDBACK.md
-!/CONTRIBUTING.md
-!/CONTRIBUTING.md
-!/CODE_OF_CONDUCT.md
-!/DEPLOYMENT.md

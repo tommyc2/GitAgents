@@ -1,29 +1,32 @@
 {
   "name": "gitagents",
   "version": "1.0.0",
-  "description": "A Multi-agent GitHub App designed to autonomously manage and maintain your codebase across platforms like GitHub and GitLab.",
-  "main": "dist/index.js",
+  "description": "A multi-agent AI code & dependency review GitHub Action for pull requests.",
+  "main": "dist/action/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
     "code-quality": "tsc --noEmit",
-    "dev": "npx tsx index.ts",
     "lint": "eslint . --ext .ts,.js --max-warnings=0",
-    "start": "node dist/index.js"
+    "build:action": "ncc build action/main.ts -o dist/action --source-map --license licenses.txt",
+    "build:action:check": "npm run build:action && git diff --exit-code dist/action"
   },
-  "keywords": [],
+  "keywords": [
+    "github-action",
+    "code-review",
+    "ai",
+    "pull-request",
+    "dependency-review",
+    "anthropic",
+    "openai"
+  ],
   "author": "tommyc2",
   "license": "ISC",
   "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0",
     "@anthropic-ai/sdk": "^0.71.2",
-    "@octokit/auth-app": "^8.0.1",
-    "@octokit/core": "^7.0.2",
-    "@octokit/rest": "^22.0.0",
-    "@octokit/webhooks": "^14.0.2",
     "dotenv": "^16.5.0",
-    "express": "^5.1.0",
     "js-yaml": "^4.1.1",
-    "octokit": "^5.0.3",
     "openai": "^6.16.0"
   },
   "devDependencies": {
@@ -35,9 +38,8 @@
     "@types/node": "^25.0.9",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
+    "@vercel/ncc": "^0.38.3",
     "eslint": "^8.57.1",
-    "nodemon": "^3.1.10",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

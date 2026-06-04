@@ -1,0 +1,18 @@
+name: 'GitAgents'
+description: 'Multi-agent AI code & dependency review for pull requests'
+author: 'tommyc2'
+branding:
+  icon: 'git-pull-request'
+  color: 'purple'
+inputs:
+  github-token:
+    description: 'Token used to read PR files and post the review'
+    required: false
+    default: ${{ github.token }}
+  config-path:
+    description: 'Path to agents.config.yaml in the checked-out repo'
+    required: false
+    default: 'agents.config.yaml'
+runs:
+  using: 'node20'
+  main: 'dist/action/index.js'

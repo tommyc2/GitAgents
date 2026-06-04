@@ -1,28 +1,33 @@
-# User Guide for Deployment
+# Deployment Guide (GitHub Action)
 
-## Prerequisites 
+GitAgents runs as a GitHub Action — there is no server to host. You add it to a
+workflow in your repository, provide your model API key(s) as secrets, and it
+reviews pull requests automatically.
 
-The setup for this application involves a few key ingredients.
+## Prerequisites
 
-- A GitHub app that is registered via GitHub. [1] https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app
-- You will need to obtain a `GITHUB_APP_ID`, `GITHUB_WEBHOOK_SECRET` and a private key (.pem extension). The setup guide shows how to obtain these.
+- A GitHub repository where you can add workflows and secrets.
+- An API key from **OpenAI** and/or **Anthropic**, depending on which models you
+  configure:
+  - OpenAI: https://developers.openai.com/api/docs/quickstart/
+  - Anthropic: https://platform.claude.com/
+- An `agents.config.yaml` file in the root of your repository (see below).
 
-### AI Model Configuration
+You do **not** need to register a GitHub App, run a server, expose a webhook, or
+manage a private key. Those were requirements of the old App distribution and no
+longer apply.
 
-The developer/organisation will need a an API key from either OpenAI or Anthropic. The developer can obtain these API keys from the mentioned providers by creating a Console API account on either platform. [2] https://developers.openai.com/api/docs/quickstart/ : [3] https://platform.claude.com/login?returnTo=%2F%3F
+## 1. Add secrets
 
+In your repository: **Settings → Secrets and variables → Actions → New repository
+secret**. Add the keys for the providers you use:
 
-### Port
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
 
-In addition to the steps mentioned above, the developer will need to set up a Port for the Node HTTP server. A commonly used port is `8080` or `3000` for web applications. The developer must make sure that the port is not being used by any other service on their machine.
+## 2. Add the YAML configuration
 
-### NodeJS and TypeScript (TS)
-
-One of the key libraries required for this application is **NodeJS**. The developer must make sure that this is installed an running on version `22.0` or above.
-TypeScript must also be installed on the users machine.
-
-## YAML Configuration File
-The developer will require an `agents.config.yaml` file in the root of their repository. The template below can be used:
+Create `agents.config.yaml` in the root of your repository:
 
 ```yaml
 project:
@@ -46,7 +51,6 @@ code_review:
   ignore_patterns:
     - "*.min.js"
     - "dist/**"
-    - ".tekton/**"
 
 dependency_review:
   enabled: true
@@ -67,43 +71,89 @@ feedback:
     temperature: 0.1
 ```
 
----
+The `model.name` field is required. The config is read from the checked-out
+workspace first (so it respects changes in the PR head); if it isn't present on
+disk, the action falls back to fetching it from the repo's default branch.
 
-## Cloud Provider (AWS, Render, Railway etc)
+## 3. Add the workflow
 
-It is recommended to host the application on a suitable Cloud Provider like Amazon AWS, Render, Railway, Heroku etc. If the user wishes to run the app locally, they must set up funneling via ngrok or Cloudflare. More information can be found here - https://ngrok.com/docs/guides/share-localhost/overview
+Create `.github/workflows/ai-review.yml`:
 
-If using AWS, it is recommended to setup an EC2 instance with 1GB of RAM minimum.
+```yaml
+name: AI Review
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  pull-requests: write
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: ${{ github.event.pull_request.head.sha }} }
+      - uses: tommyc2/gitagents@v1
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
 
-In addition to this, the developer must setup a Security Group with appropriate inbound/outbound traffic rules. [4] https://docs.aws.amazon.com/vpc/latest/userguide/creating-security-groups.html
+### Required permissions
 
-The recommended approach is to setup a Render or Railway instance. From here, the developer can attach the GitHub Repository to Render/Railway and manually add the environment variables. A public URL can then be generated. [5] https://render.com/docs/your-first-deploy [6] https://railway.com/new/github
+The job must grant:
 
-## Configure the application
+```yaml
+permissions:
+  pull-requests: write   # post the review
+  contents: read         # read the changed files
+```
 
-To install and run the application, the developer must follow these exact steps:
+If your repository or organization defaults to read-only `GITHUB_TOKEN`
+permissions, add the block above to the workflow (or job) explicitly.
 
-### 1. Register the GitHub App
+## 4. Verify
 
-First, the developer must create the GitHub App. This can be done using the guide above. They must check every appropriate permission and allow write access to the repository. Permissions must be unlimited for pull requests.
+Open a pull request. The workflow should run and the agents should post a review
+on the PR within a minute or two. Check the **Actions** tab for logs if nothing
+appears.
 
-### 2. Configuration
+## Inputs
 
-Next, the user/developer must clone the repository and install the necessary dependencies. These include the OpenAI and Anthropic SDKs. They must also add the environment variables to the project directory to handle communication between GitHub and the Client (their machine).
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `github-token` | no | `${{ github.token }}` | Token used to read PR files and post the review. |
+| `config-path` | no | `agents.config.yaml` | Path to the config file in the checked-out repo. |
 
-### Verification
+## Security: `pull_request` vs `pull_request_target`
 
-Once all the above steps have been completed, it is then recommended to test out the application by simply opening a pull request. The code reviewing agent should be triggered immediately.
+- **`pull_request`** (recommended): runs with a read-only token for fork PRs and
+  has no access to your secrets from forks. Safest default.
+- **`pull_request_target`**: runs in the context of the base repository with
+  access to secrets, even for fork PRs. Only use this if you understand the
+  risks — a malicious fork can attempt to exfiltrate secrets. If you use it,
+  never check out and execute untrusted PR code in the same job.
 
+## Fork pull requests
 
-### Troubleshooting
-There are many errors that can occur during the runtime. For example, A `HTTP 401` error means there is security check failure. The developer must verify they have the correct private key in their repository and that they are validating the payload correctly. [7] https://hookdeck.com/webhooks/platforms/guide-troubleshooting-github-webhooks
+For PRs opened from forks under `pull_request`, the `GITHUB_TOKEN` is read-only,
+so the review post will fail. Restrict the workflow to same-repo PRs:
 
-Another common error can be a `missing YAML file`. The developer must ensure that a valid, linted `agent.config.yaml` resides in their repository. Without this configuration, the GitHub App will post a PR comment on the developer's newly opened pull request recommending the developer/user to add one. This is part of the User Experience (UX), using clear messaging so that there is no ambiguity.
+```yaml
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+```
 
-## Optional Additions
-Developers typically package their applications with Containers. [8] https://www.docker.com/resources/what-container/These . These are lightweight, isolated environments that can be deployed to servicess like Render/Railway and even AWS. They contain their own virtual filesystem and set of permissions.
+…or accept that fork PRs will not be reviewed.
 
+## Troubleshooting
 
-
-
+- **No review appears / `HTTP 403` when posting:** the job is missing
+  `pull-requests: write`, or it's a fork PR with a read-only token.
+- **"Missing YAML config" comment:** there is no valid `agents.config.yaml` in
+  the repo root (or at `config-path`). Add one (see above).
+- **"Invalid Configuration" comment:** the config is missing the required
+  `model.name` field.
+- **Auth errors from the model provider:** the relevant `ANTHROPIC_API_KEY` /
+  `OPENAI_API_KEY` secret is missing or wrong, or not passed via `env:`.
