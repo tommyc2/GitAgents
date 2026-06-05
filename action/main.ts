@@ -82,4 +82,9 @@ async function run(): Promise<void> {
     }
 }
 
-run();
+// Force-exit once run() settles: idle keep-alive sockets in the SDK/octokit HTTP
+// pools keep the event loop open, leaving the Action step running until timeout.
+// process.exit() honors process.exitCode, so core.setFailed failures stay non-zero.
+run().finally(() => {
+    process.exit();
+});

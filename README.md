@@ -1,5 +1,3 @@
-<img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/31d42525-f61c-4b5e-bc2a-760f179354b4" />
-
 # GitAgents — Multi-Agent AI Code Review (GitHub Action)
 
 GitAgents is a GitHub Action that uses AI agents to review your pull requests. On each PR it runs a Code Review Agent and (optionally) a Dependency Review Agent, then passes their output through a Feedback Agent before posting the final review on the PR.
@@ -10,10 +8,10 @@ It supports both OpenAI and Anthropic (Claude) models. You choose the model and 
 
 1. **Add your model API key(s)** to your repository secrets (Settings → Secrets and variables → Actions): `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`.
 2. **Add `agents.config.yaml`** to the root of your repository (see [Configuration](#configuration)).
-3. **Add a workflow** at `.github/workflows/ai-review.yml`:
+3. **Add a workflow** at `.github/workflows/gitagents.yml`:
 
 ```yaml
-name: AI Review
+name: GitAgents Code Review
 on:
   pull_request:
     branches: [main]
@@ -32,25 +30,29 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-> Model API keys are passed via `env:` — the agents read them from the process environment. The GitHub token is supplied automatically through the default `github-token` input.
+> Model API keys are passed via `env:` (the agents read them from the process environment). The GitHub token is supplied automatically through the default `github-token` input.
 
 ## Inputs
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `github-token` | no | `${{ github.token }}` | Token used to read PR files and post the review. |
-| `config-path` | no | `agents.config.yaml` | Path to the config file in the checked-out repo. |
+
+| Input          | Required | Default               | Description                                      |
+| -------------- | -------- | --------------------- | ------------------------------------------------ |
+| `github-token` | no       | `${{ github.token }}` | Token used to read PR files and post the review. |
+| `config-path`  | no       | `agents.config.yaml`  | Path to the config file in the checked-out repo. |
+
 
 ## Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
+
+| Variable            | Required                    | Description                 |
+| ------------------- | --------------------------- | --------------------------- |
 | `ANTHROPIC_API_KEY` | when using Anthropic models | Anthropic (Claude) API key. |
-| `OPENAI_API_KEY` | when using OpenAI models | OpenAI API key. |
+| `OPENAI_API_KEY`    | when using OpenAI models    | OpenAI API key.             |
+
 
 ## Permissions
 
-The job must grant the action enough scope to read the diff and post the review:
+The job must grant the action enough scope to read the git diff and post the review:
 
 ```yaml
 permissions:
@@ -60,7 +62,7 @@ permissions:
 
 ## How It Works
 
-1. A pull request is opened or updated and your workflow triggers on `pull_request`.
+1. A pull request is opened and your workflow triggers on `pull_request`.
 2. The action reads the event payload, builds an authenticated Octokit from `github-token`, and loads `agents.config.yaml` from the checked-out workspace (falling back to the repo's default branch via the API if it isn't present on disk).
 3. The changed files are fetched **at the PR head commit** so the review reflects exactly what's proposed.
 4. The Code Review Agent reviews the changed files. If dependency review is enabled and a configured manifest file changed, the Dependency Review Agent also runs.
@@ -168,9 +170,11 @@ The `model.name` field is required. If the config is missing or invalid, the act
 
 Agents can request tools to gather more information before completing their review. Currently available:
 
-| Tool | Description |
-|------|-------------|
+
+| Tool              | Description                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------- |
 | `search_codebase` | Searches the repository's code via the GitHub Search API and returns the first matching file's content. |
+
 
 New tools can be added by creating a handler function in `toolHandlers.ts` and registering it in `loadToolMap.ts`.
 
@@ -198,4 +202,4 @@ jobs:
 - `npm run lint` — lint
 - `npm run build:action` — bundle the action into `dist/action/index.js` (this artifact is committed and must be rebuilt whenever source under `action/`, `core/`, `agents/`, `config/`, `utils/`, or `types/` changes)
 
-See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full setup guide.
+See `[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)` for the full setup guide.

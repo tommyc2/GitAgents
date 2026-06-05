@@ -7,8 +7,8 @@ global_config:
   language: "en"
 
 model:
-  provider: "openai"
-  name: "gpt-5.4-mini-2026-03-17"
+  provider: "anthropic"
+  name: "claude-sonnet-4-6"
   max_tokens: 4096
   temperature: 0.2
 
