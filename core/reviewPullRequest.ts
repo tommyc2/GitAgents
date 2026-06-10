@@ -11,7 +11,7 @@ import { runManifestReview } from "./runManifestReview.js";
 export async function reviewPullRequest(octokit, config: YAMLConfig, ids: ReviewIdentifiers) {
     const { owner, repo, pullNumber, commitId } = ids;
 
-    const files: FileData[] = await loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId);
+    const files: FileData[] = await loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, config.code_review?.ignore_patterns);
     console.log("---- Files ----\n", files);
 
     //////// Dependency Checker /////////////////////////

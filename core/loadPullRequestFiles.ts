@@ -1,5 +1,5 @@
 import { githubApiVersion } from "../config/config.js";
-import { convertBase64ToString } from "../utils/utils.js";
+import { convertBase64ToString, buildIgnoreMatcher } from "../utils/utils.js";
 import { FileData } from "../types/index.js";
 
 // Fetches the changed files of a pull request and returns each non-removed file
@@ -7,14 +7,20 @@ import { FileData } from "../types/index.js";
 // so the review can't race a moving head. Uses the REST client (octokit.rest)
 // rather than an App-installation-authenticated raw fetch, so this works with any
 // token-authenticated octokit (App installation token or Action GITHUB_TOKEN).
+//
+// Files matching `ignorePatterns` (code_review.ignore_patterns) are skipped before
+// their content is fetched, keeping generated/vendored files (e.g. dist/**) out of
+// both the Contents API calls and the LLM prompt — avoiding token rate limits.
 export async function loadPullRequestFiles(
     octokit,
     owner: string,
     repo: string,
     pullNumber: number,
-    commitId: string
+    commitId: string,
+    ignorePatterns?: string[]
 ): Promise<FileData[]> {
     const files: FileData[] = [];
+    const isIgnored = buildIgnoreMatcher(ignorePatterns);
 
     const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
         owner: owner,
@@ -31,6 +37,11 @@ export async function loadPullRequestFiles(
 
     for (const file of response.data) {
         if (file.status === "removed") {
+            continue;
+        }
+
+        if (isIgnored(file.filename)) {
+            console.log(`Skipping ignored file (matches ignore_patterns): ${file.filename}`);
             continue;
         }
 

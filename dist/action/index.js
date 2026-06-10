@@ -35984,6 +35984,44 @@ function stripCodeFences(text) {
     const match = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
     return match ? match[1] ?? text : text;
 }
+// Translate a single glob pattern to a RegExp with .gitignore-like semantics:
+// `**` spans path separators, `*` stays within a segment, and a slashless pattern
+// (e.g. "*.min.js") matches the basename at any depth.
+function globToRegExp(pattern) {
+    const matchBase = !pattern.includes("/");
+    let re = "";
+    for (let i = 0; i < pattern.length; i++) {
+        const c = pattern.charAt(i);
+        if (c === "*") {
+            if (pattern.charAt(i + 1) === "*") {
+                re += ".*";
+                i++;
+                if (pattern.charAt(i + 1) === "/")
+                    i++; // let "dist/**" match "dist/a/b"
+            }
+            else {
+                re += "[^/]*";
+            }
+        }
+        else if (c === "?") {
+            re += "[^/]";
+        }
+        else {
+            re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+        }
+    }
+    return new RegExp(matchBase ? `(^|/)${re}$` : `^${re}$`);
+}
+// Compile code_review.ignore_patterns once into a reusable predicate that reports
+// whether a filename should be skipped. Precompiling here (rather than per file)
+// avoids rebuilding the same RegExps for every changed file in the PR. Used to drop
+// generated/vendored files (e.g. dist/**) before they reach the LLM.
+function buildIgnoreMatcher(patterns) {
+    const regexps = Array.isArray(patterns) ? patterns.map(globToRegExp) : [];
+    if (regexps.length === 0)
+        return () => false;
+    return (filename) => regexps.some((re) => re.test(filename));
+}
 async function postInformativeComment(octokit, owner, repo, pullNumber, body) {
     await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
         owner,
@@ -49722,8 +49760,12 @@ async function runFeedbackAgent(config, owner, repo, pullNumber, commitId, files
 // so the review can't race a moving head. Uses the REST client (octokit.rest)
 // rather than an App-installation-authenticated raw fetch, so this works with any
 // token-authenticated octokit (App installation token or Action GITHUB_TOKEN).
-async function loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId) {
+// Files matching `ignorePatterns` (code_review.ignore_patterns) are skipped before
+// their content is fetched, keeping generated/vendored files (e.g. dist/**) out of
+// both the Contents API calls and the LLM prompt — avoiding token rate limits.
+async function loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, ignorePatterns) {
     const files = [];
+    const isIgnored = buildIgnoreMatcher(ignorePatterns);
     const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
         owner: owner,
         repo: repo,
@@ -49737,6 +49779,10 @@ async function loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId) 
     }
     for (const file of response.data) {
         if (file.status === "removed") {
+            continue;
+        }
+        if (isIgnored(file.filename)) {
+            console.log(`Skipping ignored file (matches ignore_patterns): ${file.filename}`);
             continue;
         }
         const { data } = await octokit.rest.repos.getContent({
@@ -49798,7 +49844,7 @@ async function runManifestReview(config, octokit, owner, repo, pullNumber, commi
 // token-authenticated octokit, so it serves both the App and the Action.
 async function reviewPullRequest(octokit, config, ids) {
     const { owner, repo, pullNumber, commitId } = ids;
-    const files = await loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId);
+    const files = await loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, config.code_review?.ignore_patterns);
     console.log("---- Files ----\n", files);
     //////// Dependency Checker /////////////////////////
     const userRepoManifestFileData = [];
