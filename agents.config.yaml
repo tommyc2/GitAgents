@@ -20,6 +20,7 @@ code_review:
   ignore_patterns:
     - "*.min.js"
     - "dist/**"
+    - "docs/DEPLOYMENT.md"
 
 dependency_review:
   enabled: true

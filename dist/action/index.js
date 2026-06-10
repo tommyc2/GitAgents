@@ -49777,6 +49777,10 @@ async function runFeedbackAgent(config, owner, repo, pullNumber, commitId, files
 ;// CONCATENATED MODULE: ./core/loadPullRequestFiles.ts
 
 
+// Upper bound on the size (decoded content + diff) of a single file we hand to the
+// model. A committed lockfile or generated bundle can, on its own, exceed the entire
+// per-minute input-token rate limit; see the skip in loadPullRequestFiles below.
+const MAX_REVIEWABLE_FILE_CHARS = 70000;
 // Fetches the changed files of a pull request and returns each non-removed file
 // alongside its decoded content. Content is read at `commitId` (the PR head SHA)
 // so the review can't race a moving head. Uses the REST client (octokit.rest)
@@ -49825,9 +49829,18 @@ async function loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, 
             console.warn(`Skipping ${file.filename}: no inline content (file may exceed the 1MB API limit)`);
             continue;
         }
+        const content = convertBase64ToString(data.content);
+        // A single oversized file (e.g. a committed lockfile or generated bundle) can,
+        // on its own, exceed the model's per-minute input-token rate limit — starving
+        // every later agent call. Skip it here; the diff is still visible on the PR.
+        const reviewSize = content.length + (file.patch?.length ?? 0);
+        if (reviewSize > MAX_REVIEWABLE_FILE_CHARS) {
+            console.warn(`Skipping ${file.filename}: too large to review (${reviewSize} chars > ${MAX_REVIEWABLE_FILE_CHARS} limit)`);
+            continue;
+        }
         files.push({
             data: file, // raw file metadata from the PR files endpoint
-            content: convertBase64ToString(data.content),
+            content,
         });
     }
     return files;
@@ -49853,6 +49866,10 @@ async function runManifestReview(config, octokit, owner, repo, pullNumber, commi
     const dependencyReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, manifestFileData, generateDependencyReview);
     console.log(" ----- Dependency Review ------\n", dependencyReviewResponse);
     const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, manifestFileData, dependencyReviewResponse);
+    if (!finalReview?.event) {
+        console.warn("Dependency review produced no usable result; skipping post.");
+        return;
+    }
     await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
 }
 
@@ -49892,12 +49909,13 @@ async function reviewPullRequest(octokit, config, ids) {
     const codeReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, files, generateCodeReview);
     // Feedback review by feedback agent (final review)
     const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, files, codeReviewResponse);
+    if (!finalReview?.event) {
+        throw new Error("Code review produced no usable result (the model returned nothing — commonly an API rate limit). See logs above.");
+    }
     // Append the ground-truth list of files sent to the reviewer to the posted comment
     // so readers can see the review's coverage. Done here, after the feedback agent, so
     // it can't be dropped when the feedback agent rewrites the body.
-    if (finalReview) {
-        finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.data.filename));
-    }
+    finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.data.filename));
     await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
 }
 

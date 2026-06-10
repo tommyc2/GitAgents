@@ -2,6 +2,11 @@ import { githubApiVersion } from "../config/config.js";
 import { convertBase64ToString, buildIgnoreMatcher } from "../utils/utils.js";
 import { FileData } from "../types/index.js";
 
+// Upper bound on the size (decoded content + diff) of a single file we hand to the
+// model. A committed lockfile or generated bundle can, on its own, exceed the entire
+// per-minute input-token rate limit; see the skip in loadPullRequestFiles below.
+const MAX_REVIEWABLE_FILE_CHARS = 70_000;
+
 // Fetches the changed files of a pull request and returns each non-removed file
 // alongside its decoded content. Content is read at `commitId` (the PR head SHA)
 // so the review can't race a moving head. Uses the REST client (octokit.rest)
@@ -65,9 +70,20 @@ export async function loadPullRequestFiles(
             continue;
         }
 
+        const content = convertBase64ToString(data.content);
+
+        // A single oversized file (e.g. a committed lockfile or generated bundle) can,
+        // on its own, exceed the model's per-minute input-token rate limit — starving
+        // every later agent call. Skip it here; the diff is still visible on the PR.
+        const reviewSize = content.length + (file.patch?.length ?? 0);
+        if (reviewSize > MAX_REVIEWABLE_FILE_CHARS) {
+            console.warn(`Skipping ${file.filename}: too large to review (${reviewSize} chars > ${MAX_REVIEWABLE_FILE_CHARS} limit)`);
+            continue;
+        }
+
         files.push({
             data: file, // raw file metadata from the PR files endpoint
-            content: convertBase64ToString(data.content),
+            content,
         });
     }
 

@@ -16,6 +16,11 @@ export async function runManifestReview(config, octokit, owner, repo, pullNumber
 
     const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, manifestFileData, dependencyReviewResponse);
 
+    if (!finalReview?.event) {
+        console.warn("Dependency review produced no usable result; skipping post.");
+        return;
+    }
+
     await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
 
 }

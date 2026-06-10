@@ -44,12 +44,14 @@ export async function reviewPullRequest(octokit, config: YAMLConfig, ids: Review
     // Feedback review by feedback agent (final review)
     const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, files, codeReviewResponse);
 
+    if (!finalReview?.event) {
+        throw new Error("Code review produced no usable result (the model returned nothing — commonly an API rate limit). See logs above.");
+    }
+
     // Append the ground-truth list of files sent to the reviewer to the posted comment
     // so readers can see the review's coverage. Done here, after the feedback agent, so
     // it can't be dropped when the feedback agent rewrites the body.
-    if (finalReview) {
-        finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.data.filename));
-    }
+    finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.data.filename));
 
     await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
 }
