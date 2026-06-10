@@ -36022,6 +36022,15 @@ function buildIgnoreMatcher(patterns) {
         return () => false;
     return (filename) => regexps.some((re) => re.test(filename));
 }
+// Render a markdown "Files reviewed" section to append to a posted review body, so
+// PR readers can see exactly which files the reviewer was given (the ground-truth
+// set after ignore_patterns filtering, independent of what the model self-reports).
+function filesReviewedSection(filenames) {
+    if (filenames.length === 0)
+        return "";
+    const list = filenames.map((f) => `- \`${f}\``).join("\n");
+    return `\n\n---\n**Files reviewed (${filenames.length}):**\n${list}`;
+}
 async function postInformativeComment(octokit, owner, repo, pullNumber, body) {
     await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
         owner,
@@ -36076,6 +36085,9 @@ function loadToolMap() {
 async function runAgent(config, octokit, owner, repo, pullNumber, commitId, files, generateReview) {
     const toolUnionString = loadToolMap();
     const repoContext = { octokit, owner, repo };
+    // Debugging: surface exactly which files are handed to the LLM (filenames only,
+    // not content) so we can confirm ignore_patterns filtering and PR file loading.
+    console.log(`Files passed to the LLM (${files.length}):`, files.map((f) => f?.data?.filename));
     const messages = [];
     messages.push({ role: 'user', content: 'Please follow the system instructions.' });
     let llmResponse = await generateReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
@@ -36089,6 +36101,12 @@ async function runAgent(config, octokit, owner, repo, pullNumber, commitId, file
             return undefined;
         }
         else if (llmResponse.type === "final_review") {
+            // Debugging: the model self-reports which files it actually read (see the
+            // "files_reviewed" field added to the review prompts). Compare against the
+            // "Files passed to the LLM" log above to spot files the model skipped.
+            if (llmResponse.files_reviewed) {
+                console.log("Files the model reported reading:", llmResponse.files_reviewed);
+            }
             return llmResponse.content;
         }
         else if (llmResponse.type === "request_tool") {
@@ -49587,6 +49605,7 @@ Return **only** a valid JSON Object following one of the two shapes below:
 2. If you have all the information you need to post a review:
 {
   "type": "final_review",
+  "files_reviewed": ["path/to/file_a", "path/to/file_b"], // DEBUG: list every file from the input above that you actually read and reviewed
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
@@ -49619,6 +49638,7 @@ Review guidelines:
 - Only add line-level comments when necessary. Keep these to a minimum. For example, keep comments to a maximum of 5.
 - If there are any bugs or errors, report them in your review.
 - If you are setting the event to 'APPROVE', the main body field should have a value of 'lgtm'.
+- Populate "files_reviewed" with the path of every file from the input above that you actually read and reviewed. This is used to debug review coverage, so always include it.
 
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `;
@@ -49696,6 +49716,7 @@ Return **only** a valid JSON object following one of the two shapes below:
 2. If you have all the information you need to post a review:
 {
   "type": "final_review",
+  "files_reviewed": ["path/to/manifest_a", "path/to/manifest_b"], // DEBUG: list every manifest file from the input above that you actually read
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
@@ -49717,6 +49738,7 @@ Guidelines:
 - Do not include a 'comments' field in the content.
 - Keep the body concise.
 - If no dependency risks are found, set body to an empty string.
+- Populate "files_reviewed" with the path of every manifest file from the input above that you actually read. This is used to debug review coverage, so always include it.
 
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `;
@@ -49760,6 +49782,7 @@ async function runFeedbackAgent(config, owner, repo, pullNumber, commitId, files
 // so the review can't race a moving head. Uses the REST client (octokit.rest)
 // rather than an App-installation-authenticated raw fetch, so this works with any
 // token-authenticated octokit (App installation token or Action GITHUB_TOKEN).
+//
 // Files matching `ignorePatterns` (code_review.ignore_patterns) are skipped before
 // their content is fetched, keeping generated/vendored files (e.g. dist/**) out of
 // both the Contents API calls and the LLM prompt — avoiding token rate limits.
@@ -49839,6 +49862,7 @@ async function runManifestReview(config, octokit, owner, repo, pullNumber, commi
 
 
 
+
 // Core review pipeline, decoupled from webhook/Action arrival semantics. Callers
 // resolve the PR identifiers and the YAML config, then hand off here. Takes any
 // token-authenticated octokit, so it serves both the App and the Action.
@@ -49868,6 +49892,12 @@ async function reviewPullRequest(octokit, config, ids) {
     const codeReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, files, generateCodeReview);
     // Feedback review by feedback agent (final review)
     const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, files, codeReviewResponse);
+    // Append the ground-truth list of files sent to the reviewer to the posted comment
+    // so readers can see the review's coverage. Done here, after the feedback agent, so
+    // it can't be dropped when the feedback agent rewrites the body.
+    if (finalReview) {
+        finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.data.filename));
+    }
     await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
 }
 

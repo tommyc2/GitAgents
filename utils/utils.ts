@@ -70,6 +70,15 @@ export function buildIgnoreMatcher(patterns?: string[]): (filename: string) => b
     return (filename: string) => regexps.some((re) => re.test(filename));
 }
 
+// Render a markdown "Files reviewed" section to append to a posted review body, so
+// PR readers can see exactly which files the reviewer was given (the ground-truth
+// set after ignore_patterns filtering, independent of what the model self-reports).
+export function filesReviewedSection(filenames: string[]): string {
+    if (filenames.length === 0) return "";
+    const list = filenames.map((f) => `- \`${f}\``).join("\n");
+    return `\n\n---\n**Files reviewed (${filenames.length}):**\n${list}`;
+}
+
 export async function postInformativeComment(
     octokit: any,
     owner: string,

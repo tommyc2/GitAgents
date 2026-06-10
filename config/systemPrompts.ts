@@ -75,6 +75,7 @@ Return **only** a valid JSON Object following one of the two shapes below:
 2. If you have all the information you need to post a review:
 {
   "type": "final_review",
+  "files_reviewed": ["path/to/file_a", "path/to/file_b"], // DEBUG: list every file from the input above that you actually read and reviewed
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
@@ -107,6 +108,7 @@ Review guidelines:
 - Only add line-level comments when necessary. Keep these to a minimum. For example, keep comments to a maximum of 5.
 - If there are any bugs or errors, report them in your review.
 - If you are setting the event to 'APPROVE', the main body field should have a value of 'lgtm'.
+- Populate "files_reviewed" with the path of every file from the input above that you actually read and reviewed. This is used to debug review coverage, so always include it.
 
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `
@@ -197,6 +199,7 @@ Return **only** a valid JSON object following one of the two shapes below:
 2. If you have all the information you need to post a review:
 {
   "type": "final_review",
+  "files_reviewed": ["path/to/manifest_a", "path/to/manifest_b"], // DEBUG: list every manifest file from the input above that you actually read
   "content": {
     "owner": "${owner}",
     "repo": "${repo}",
@@ -218,6 +221,7 @@ Guidelines:
 - Do not include a 'comments' field in the content.
 - Keep the body concise.
 - If no dependency risks are found, set body to an empty string.
+- Populate "files_reviewed" with the path of every manifest file from the input above that you actually read. This is used to debug review coverage, so always include it.
 
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `
