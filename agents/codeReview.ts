@@ -1,6 +1,6 @@
 import { callModel } from "./callModel.js";
 import { codeReviewPrompt } from "../config/systemPrompts.js";
-import { YAMLConfig, CodeReviewResponse } from "../types/index.js";
+import { YAMLConfig, CodeReviewResponse, FileData } from "../types/index.js";
 
 export async function generateCodeReview(
     config: YAMLConfig,
@@ -8,7 +8,7 @@ export async function generateCodeReview(
     repo: string,
     pullNumber: number,
     commitId: string,
-    files: any[],
+    files: FileData[],
     availableTools,
     messages: any[]
 ) {

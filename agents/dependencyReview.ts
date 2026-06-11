@@ -1,6 +1,6 @@
 import { callModel } from "./callModel.js";
 import { dependencyReviewPrompt } from "../config/systemPrompts.js";
-import { YAMLConfig, DependencyReviewResponse } from "../types/index.js";
+import { YAMLConfig, DependencyReviewResponse, FileData } from "../types/index.js";
 
 export async function generateDependencyReview(
     config: YAMLConfig,
@@ -8,7 +8,7 @@ export async function generateDependencyReview(
     repo: string,
     pullNumber: number,
     commitId: string,
-    manifestFileData: any[],
+    manifestFileData: FileData[],
     availableTools: string,
     messages: any[]
 ) {

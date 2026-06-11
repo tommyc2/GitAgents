@@ -12,16 +12,16 @@ import { filesReviewedSection } from "../utils/utils.js";
 export async function reviewPullRequest(octokit, config: YAMLConfig, ids: ReviewIdentifiers) {
     const { owner, repo, pullNumber, commitId } = ids;
 
-    const files: FileData[] = await loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, config.code_review?.ignore_patterns);
-    console.log("---- Files ----\n", files);
+    const files: FileData[] = await loadPullRequestFiles(octokit, owner, repo, pullNumber, config.code_review?.ignore_patterns);
+    console.log("---- Changed files ----\n", files.map((f) => `${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`));
 
     //////// Dependency Checker /////////////////////////
 
     const userRepoManifestFileData: FileData[] = [];
 
     for (const file of files) {
-        if (config.dependency_review?.manifest_files?.includes(file.data.filename)) {
-            console.log("Package manifest file found: ", file.data.filename);
+        if (config.dependency_review?.manifest_files?.includes(file.filename)) {
+            console.log("Package manifest file found: ", file.filename);
             userRepoManifestFileData.push(file);
         }
     }
@@ -51,7 +51,7 @@ export async function reviewPullRequest(octokit, config: YAMLConfig, ids: Review
     // Append the ground-truth list of files sent to the reviewer to the posted comment
     // so readers can see the review's coverage. Done here, after the feedback agent, so
     // it can't be dropped when the feedback agent rewrites the body.
-    finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.data.filename));
+    finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.filename));
 
     await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
 }

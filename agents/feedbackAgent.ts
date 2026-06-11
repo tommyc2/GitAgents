@@ -1,6 +1,6 @@
 import { callModel } from "./callModel.js";
 import { feedbackReviewPrompt } from "../config/systemPrompts.js";
-import { YAMLConfig } from "../types/index.js";
+import { YAMLConfig, FileData } from "../types/index.js";
 
 export async function runFeedbackAgent(
     config: YAMLConfig,
@@ -8,7 +8,7 @@ export async function runFeedbackAgent(
     repo: string,
     pullNumber: number,
     commitId: string,
-    files: any[],
+    files: FileData[],
     primaryReview: any
 ): Promise<any> {
 

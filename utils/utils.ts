@@ -1,4 +1,5 @@
 import yaml from "js-yaml";
+import { FileData } from "../types/index.js";
 
 export function convertBase64ToString(base64: string): string {
     return Buffer.from(base64, 'base64').toString('utf-8');
@@ -68,6 +69,24 @@ export function buildIgnoreMatcher(patterns?: string[]): (filename: string) => b
     const regexps = Array.isArray(patterns) ? patterns.map(globToRegExp) : [];
     if (regexps.length === 0) return () => false;
     return (filename: string) => regexps.some((re) => re.test(filename));
+}
+
+// Render the changed files as markdown unified-diff sections for the agent
+// prompts. Diff-only by design: the model is guaranteed to see every changed
+// line, and pulls full file contents on demand via the read_file tool when a
+// hunk lacks context. Four-backtick fences so a diff that itself contains ```
+// can't break out of its code block.
+export function formatFilesForPrompt(files: FileData[]): string {
+    if (files.length === 0) return "_No reviewable files in this pull request._";
+
+    return files.map((file) => {
+        const renamed = file.previous_filename ? ` from \`${file.previous_filename}\`` : "";
+        const header = `### \`${file.filename}\` (${file.status}${renamed}, +${file.additions}/-${file.deletions})`;
+        const body = file.patch
+            ? `\`\`\`\`diff\n${file.patch}\n\`\`\`\``
+            : `_Diff unavailable (binary or oversized file). Use the read_file tool if you need its content._`;
+        return `${header}\n${body}`;
+    }).join("\n\n");
 }
 
 // Render a markdown "Files reviewed" section to append to a posted review body, so

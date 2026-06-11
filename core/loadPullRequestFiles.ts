@@ -1,27 +1,29 @@
 import { githubApiVersion } from "../config/config.js";
-import { convertBase64ToString, buildIgnoreMatcher } from "../utils/utils.js";
+import { buildIgnoreMatcher } from "../utils/utils.js";
 import { FileData } from "../types/index.js";
 
-// Upper bound on the size (decoded content + diff) of a single file we hand to the
-// model. A committed lockfile or generated bundle can, on its own, exceed the entire
-// per-minute input-token rate limit; see the skip in loadPullRequestFiles below.
-const MAX_REVIEWABLE_FILE_CHARS = 70_000;
+// Upper bound on a single file's diff that we hand to the model. A committed
+// lockfile or generated bundle's patch can, on its own, exceed the entire
+// per-minute input-token rate limit. Oversized patches are truncated (not
+// dropped) so the file still appears in the review with partial context and
+// the agent can read_file it if needed.
+const MAX_PATCH_CHARS = 70_000;
 
-// Fetches the changed files of a pull request and returns each non-removed file
-// alongside its decoded content. Content is read at `commitId` (the PR head SHA)
-// so the review can't race a moving head. Uses the REST client (octokit.rest)
-// rather than an App-installation-authenticated raw fetch, so this works with any
-// token-authenticated octokit (App installation token or Action GITHUB_TOKEN).
+// Fetches the changed files of a pull request, diff-only: each file's unified
+// diff (`patch`) comes straight from the PR files endpoint, so no per-file
+// Contents API calls and no full file contents in the prompt. Agents that need
+// more context than a hunk shows pull the full file on demand via the
+// read_file tool (see agents/toolHandlers.ts).
 //
-// Files matching `ignorePatterns` (code_review.ignore_patterns) are skipped before
-// their content is fetched, keeping generated/vendored files (e.g. dist/**) out of
-// both the Contents API calls and the LLM prompt — avoiding token rate limits.
+// Files matching `ignorePatterns` (code_review.ignore_patterns) are skipped,
+// keeping generated/vendored files (e.g. dist/**) out of the LLM prompt and
+// avoiding token rate limits. Removed files are included — their patch shows
+// the deletion, which is reviewable.
 export async function loadPullRequestFiles(
     octokit,
     owner: string,
     repo: string,
     pullNumber: number,
-    commitId: string,
     ignorePatterns?: string[]
 ): Promise<FileData[]> {
     const files: FileData[] = [];
@@ -31,6 +33,7 @@ export async function loadPullRequestFiles(
         owner: owner,
         repo: repo,
         pull_number: pullNumber,
+        per_page: 100,
         headers: {
             'X-GitHub-Api-Version': githubApiVersion
         }
@@ -41,49 +44,28 @@ export async function loadPullRequestFiles(
     }
 
     for (const file of response.data) {
-        if (file.status === "removed") {
-            continue;
-        }
-
         if (isIgnored(file.filename)) {
             console.log(`Skipping ignored file (matches ignore_patterns): ${file.filename}`);
             continue;
         }
 
-        const { data } = await octokit.rest.repos.getContent({
-            owner: owner,
-            repo: repo,
-            path: file.filename,
-            ref: commitId,
-        });
-
-        // getContent's response is a union: file | directory | symlink | submodule.
-        // We only handle regular files; skip anything else.
-        if (Array.isArray(data) || data.type !== "file") {
-            continue;
-        }
-
-        // Files larger than ~1MB are returned without inline content (content is empty
-        // and a download_url is provided instead). Log + skip for now.
-        if (!data.content) {
-            console.warn(`Skipping ${file.filename}: no inline content (file may exceed the 1MB API limit)`);
-            continue;
-        }
-
-        const content = convertBase64ToString(data.content);
-
-        // A single oversized file (e.g. a committed lockfile or generated bundle) can,
-        // on its own, exceed the model's per-minute input-token rate limit — starving
-        // every later agent call. Skip it here; the diff is still visible on the PR.
-        const reviewSize = content.length + (file.patch?.length ?? 0);
-        if (reviewSize > MAX_REVIEWABLE_FILE_CHARS) {
-            console.warn(`Skipping ${file.filename}: too large to review (${reviewSize} chars > ${MAX_REVIEWABLE_FILE_CHARS} limit)`);
-            continue;
+        // The endpoint omits `patch` for binary files and very large diffs. Keep the
+        // file (so the reviewer knows it changed) and let formatFilesForPrompt note
+        // that the diff is unavailable.
+        let patch: string | undefined = file.patch;
+        if (patch && patch.length > MAX_PATCH_CHARS) {
+            console.warn(`Truncating oversized diff for ${file.filename} (${patch.length} chars > ${MAX_PATCH_CHARS} limit)`);
+            patch = patch.slice(0, MAX_PATCH_CHARS)
+                + `\n... [diff truncated: showing ${MAX_PATCH_CHARS} of ${patch.length} chars]`;
         }
 
         files.push({
-            data: file, // raw file metadata from the PR files endpoint
-            content,
+            filename: file.filename,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+            patch,
+            previous_filename: file.previous_filename,
         });
     }
 

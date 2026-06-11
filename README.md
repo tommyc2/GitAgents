@@ -152,7 +152,7 @@ The `model.name` field is required. If the config is missing or invalid, the act
 ### Code Review Agent
 
 - Location: `agents/codeReview.ts`
-- Reviews all changed files in a pull request.
+- Reviews all changed files in a pull request. The agent is given the unified diff of every changed file upfront (so coverage is guaranteed) and pulls full file contents on demand via the `read_file` tool when a hunk needs more context.
 
 ### Dependency Review Agent
 
@@ -174,15 +174,23 @@ Agents can request tools to gather more information before completing their revi
 | Tool              | Description                                                                                             |
 | ----------------- | ------------------------------------------------------------------------------------------------------- |
 | `search_codebase` | Searches the repository's code via the GitHub Search API and returns the first matching file's content. |
+| `read_file`       | Reads a file's full content at the PR head commit. Used when a diff hunk lacks enough surrounding context. |
 
 
 New tools can be added by creating a handler function in `toolHandlers.ts` and registering it in `loadToolMap.ts`.
 
 ```typescript
-const tools: [string, ToolHandler][] = [
-    ["search_codebase", searchCodebaseTool]
+const tools: { name: string; handler: ToolHandler; usage: string }[] = [
+    {
+        name: "search_codebase",
+        handler: searchCodebaseTool,
+        usage: `"search_codebase" — args: ["<query>"]. Searches the repository's code...`,
+    },
+    // ...
 ];
 ```
+
+The `usage` string is injected into the agent prompts so the model knows each tool's argument order.
 
 ## Fork pull requests
 

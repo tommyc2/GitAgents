@@ -36022,6 +36022,23 @@ function buildIgnoreMatcher(patterns) {
         return () => false;
     return (filename) => regexps.some((re) => re.test(filename));
 }
+// Render the changed files as markdown unified-diff sections for the agent
+// prompts. Diff-only by design: the model is guaranteed to see every changed
+// line, and pulls full file contents on demand via the read_file tool when a
+// hunk lacks context. Four-backtick fences so a diff that itself contains ```
+// can't break out of its code block.
+function formatFilesForPrompt(files) {
+    if (files.length === 0)
+        return "_No reviewable files in this pull request._";
+    return files.map((file) => {
+        const renamed = file.previous_filename ? ` from \`${file.previous_filename}\`` : "";
+        const header = `### \`${file.filename}\` (${file.status}${renamed}, +${file.additions}/-${file.deletions})`;
+        const body = file.patch
+            ? `\`\`\`\`diff\n${file.patch}\n\`\`\`\``
+            : `_Diff unavailable (binary or oversized file). Use the read_file tool if you need its content._`;
+        return `${header}\n${body}`;
+    }).join("\n\n");
+}
 // Render a markdown "Files reviewed" section to append to a posted review body, so
 // PR readers can see exactly which files the reviewer was given (the ground-truth
 // set after ignore_patterns filtering, independent of what the model self-reports).
@@ -36042,6 +36059,9 @@ async function postInformativeComment(octokit, owner, repo, pullNumber, body) {
 
 ;// CONCATENATED MODULE: ./agents/toolHandlers.ts
 
+// Cap on the content a single read_file call returns to the model, so one huge
+// file can't blow the input-token budget mid-review.
+const MAX_TOOL_RESULT_CHARS = 70000;
 async function searchCodebaseTool(context, query) {
     const searchResponse = await context.octokit.request('GET /search/code', {
         q: `${query}+repo:${context.owner}/${context.repo}`,
@@ -36062,14 +36082,60 @@ async function searchCodebaseTool(context, query) {
         content: content,
     });
 }
+// Reads a file from the repository at the PR head commit. Lets agents pull full
+// file contents on demand when a diff hunk in the prompt lacks context, instead
+// of every file's content being pushed into the prompt upfront. Errors are
+// returned as strings rather than thrown so the agent loop can hand them back
+// to the model, which can recover (e.g. retry with a corrected path).
+async function readFileTool(context, path) {
+    try {
+        const { data } = await context.octokit.rest.repos.getContent({
+            owner: context.owner,
+            repo: context.repo,
+            path,
+            ref: context.commitId,
+        });
+        if (Array.isArray(data)) {
+            return `"${path}" is a directory. Entries: ${data.map((entry) => entry.name).join(", ")}`;
+        }
+        // Files larger than ~1MB come back without inline content (only a download_url).
+        if (data.type !== "file" || !data.content) {
+            return `"${path}" has no readable content (type: ${data.type}; files over 1MB are not returned inline).`;
+        }
+        let content = convertBase64ToString(data.content);
+        if (content.length > MAX_TOOL_RESULT_CHARS) {
+            content = content.slice(0, MAX_TOOL_RESULT_CHARS)
+                + `\n... [truncated: showing ${MAX_TOOL_RESULT_CHARS} of ${content.length} chars]`;
+        }
+        return `Contents of ${path} at ${context.commitId}:\n\`\`\`\`\n${content}\n\`\`\`\``;
+    }
+    catch (error) {
+        if (error?.status === 404) {
+            return `read_file failed: "${path}" does not exist at the PR head commit. Check the path against the changed files list.`;
+        }
+        return `read_file failed for "${path}": ${error?.message ?? String(error)}`;
+    }
+}
 
 ;// CONCATENATED MODULE: ./config/loadToolMap.ts
 
+// Note for user: Add more tools here. `usage` is injected into the agent
+// prompts (see loadToolUsage) so the model knows each tool's argument order.
 const tools = [
-    // Note for user: Add more tools here
-    ["search_codebase", searchCodebaseTool]
+    {
+        name: "search_codebase",
+        handler: searchCodebaseTool,
+        usage: `"search_codebase" — args: ["<query>"]. Searches the repository's code and returns the first matching file's content.`,
+    },
+    {
+        name: "read_file",
+        handler: readFileTool,
+        usage: `"read_file" — args: ["<repo-relative file path>"]. Returns the file's full content at the PR head commit. Use when a diff hunk lacks enough surrounding context to review confidently.`,
+    },
 ];
-const toolMap = new Map(tools);
+const toolMap = new Map(tools.map((t) => [t.name, t.handler]));
+// Union of tool names (e.g. `"search_codebase" | "read_file"`), embedded in the
+// JSON response shape in the prompts.
 function loadToolMap() {
     let union = "";
     if (toolMap.size > 0) {
@@ -36078,22 +36144,32 @@ function loadToolMap() {
     }
     return union || "No tools loaded.";
 }
+// One usage line per tool, embedded in the prompts under "Available tools".
+function loadToolUsage() {
+    return tools.map((t) => `- ${t.usage}`).join("\n");
+}
 
 ;// CONCATENATED MODULE: ./agents/runAgent.ts
 
 
+// Cap on tool round-trips per review. Each request_tool turn is a full extra
+// model call that re-sends the whole conversation, so an agent stuck in a
+// read-everything loop burns tokens fast. Past the cap the agent is told to
+// finalize with what it has; a couple of grace turns later we give up.
+const MAX_TOOL_CALLS = 8;
 async function runAgent(config, octokit, owner, repo, pullNumber, commitId, files, generateReview) {
     const toolUnionString = loadToolMap();
-    const repoContext = { octokit, owner, repo };
+    const repoContext = { octokit, owner, repo, commitId };
     // Debugging: surface exactly which files are handed to the LLM (filenames only,
-    // not content) so we can confirm ignore_patterns filtering and PR file loading.
-    console.log(`Files passed to the LLM (${files.length}):`, files.map((f) => f?.data?.filename));
+    // not diffs) so we can confirm ignore_patterns filtering and PR file loading.
+    console.log(`Files passed to the LLM (${files.length}):`, files.map((f) => f?.filename));
     const messages = [];
     messages.push({ role: 'user', content: 'Please follow the system instructions.' });
     let llmResponse = await generateReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
     if (llmResponse) {
         messages.push({ role: 'assistant', content: JSON.stringify(llmResponse) });
     }
+    let toolCalls = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
         if (!llmResponse) {
@@ -36110,19 +36186,41 @@ async function runAgent(config, octokit, owner, repo, pullNumber, commitId, file
             return llmResponse.content;
         }
         else if (llmResponse.type === "request_tool") {
-            const toolHandler = toolMap.get(llmResponse.tool);
-            if (!toolHandler) {
-                console.error(`Tool ${llmResponse.tool} not found`);
+            toolCalls++;
+            if (toolCalls > MAX_TOOL_CALLS + 2) {
+                console.error(`Agent kept requesting tools past the budget (${toolCalls} calls); giving up.`);
                 return undefined;
             }
-            const toolResult = await toolHandler(repoContext, ...llmResponse.args);
-            if (toolResult) {
-                messages.push({ role: 'user', content: toolResult });
+            // Tool problems (unknown tool, bad args, 404s) are fed back to the model
+            // as the tool result rather than aborting the review — the model can
+            // correct itself on the next turn.
+            let toolResult;
+            if (toolCalls > MAX_TOOL_CALLS) {
+                toolResult = "Tool budget exhausted. Respond with your final_review now, using the information you already have.";
             }
             else {
-                console.error(`Tool ${llmResponse.tool} returned no result`);
-                return undefined;
+                const toolHandler = toolMap.get(llmResponse.tool);
+                if (!toolHandler) {
+                    console.error(`Tool ${llmResponse.tool} not found`);
+                    toolResult = `Tool "${llmResponse.tool}" not found. Available tools: ${toolUnionString}`;
+                }
+                else {
+                    const args = Array.isArray(llmResponse.args) ? llmResponse.args : [];
+                    console.log(`Tool call ${toolCalls}/${MAX_TOOL_CALLS}: ${llmResponse.tool}(${JSON.stringify(args)})`);
+                    try {
+                        toolResult = await toolHandler(repoContext, ...args);
+                    }
+                    catch (error) {
+                        console.error(`Tool ${llmResponse.tool} threw:`, error);
+                        toolResult = `Tool "${llmResponse.tool}" failed: ${error instanceof Error ? error.message : String(error)}`;
+                    }
+                    if (!toolResult) {
+                        console.error(`Tool ${llmResponse.tool} returned no result`);
+                        toolResult = `Tool "${llmResponse.tool}" returned no result.`;
+                    }
+                }
             }
+            messages.push({ role: 'user', content: toolResult });
             llmResponse = await generateReview(config, owner, repo, pullNumber, commitId, files, toolUnionString, messages);
             if (llmResponse) {
                 messages.push({
@@ -49538,6 +49636,8 @@ async function callModel(config, systemPrompt, messages) {
 ;// CONCATENATED MODULE: ./config/systemPrompts.ts
 // system prompts and message templates for the agents
 
+
+
 const missingConfigBody = `
 ### Missing Configuration File
 
@@ -49589,9 +49689,12 @@ Once the file is committed to the default branch, close and re-open this PR to t
 const codeReviewPrompt = (owner, repo, pullNumber, commitId, files, availableTools) => `
 You are a Senior Code Review Expert.
 
-Review the changed files below:
+Review the pull request below. Each changed file is shown as a unified diff — together they are the complete set of changes under review:
 
-${JSON.stringify(files)}
+${formatFilesForPrompt(files)}
+
+Available tools:
+${loadToolUsage()}
 
 Return **only** a valid JSON Object following one of the two shapes below:
 
@@ -49632,6 +49735,8 @@ Review guidelines:
 
 - Be concise, constructive, and helpful.
 - Prioritize correctness, clarity, and maintainability.
+- The diffs above cover every changed line. If a hunk lacks enough surrounding context to judge confidently, use the read_file tool to fetch that file's full content instead of guessing.
+- For line-level comments, "line" is the line number in the file after the change (derive it from the @@ hunk headers), with "side": "RIGHT". Use "LEFT" with the old line number only for deleted lines.
 - Use "APPROVE" if the code is robust and solid and include a short message (e.g., 'lgtm' command to approve PR).
 - Use "COMMENT" for non-blocking suggestions or observations.
 - Use "REQUEST_CHANGES" if critical issues MUST be addressed before merging.
@@ -49646,10 +49751,10 @@ Again, respond with a single, valid JSON object. Do not include any prose or for
 const feedbackReviewPrompt = (owner, repo, pullNumber, commitId, files, primaryReview) => `
 You are a senior code review verifier in a Quality engineering department.
 
-A primary review agent has already reviewed the following changed files below:
+A primary review agent has already reviewed the changed files below, shown as unified diffs:
 
 ---
-${JSON.stringify(files)}
+${formatFilesForPrompt(files)}
 ---
 
 The primary agent produced this review below:
@@ -49700,9 +49805,12 @@ Respond with a single, valid JSON object. Do not include any prose or formatting
 const dependencyReviewPrompt = (owner, repo, pullNumber, commitId, manifestFileData, availableTools) => `
 You are a dependency conflict expert.
 
-Review the changed manifest files below specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
+Review the changed manifest files below, shown as unified diffs, specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
 
-${JSON.stringify(manifestFileData)}
+${formatFilesForPrompt(manifestFileData)}
+
+Available tools:
+${loadToolUsage()}
 
 Return **only** a valid JSON object following one of the two shapes below:
 
@@ -49734,6 +49842,7 @@ Guidelines:
 
 - Focus **ONLY** on dependency manifest files (e.g., package.json, package-lock.json, pom.xml, go.mod, etc).
 - Look for potential conflicts that could or will occur (e.g., mismatched peer dependencies, major version jumps without migration).
+- The diffs show what changed. If you need a manifest's complete dependency list to judge a conflict, use the read_file tool to fetch the full file.
 - Always use "COMMENT" as the event.
 - Do not include a 'comments' field in the content.
 - Keep the body concise.
@@ -49777,26 +49886,30 @@ async function runFeedbackAgent(config, owner, repo, pullNumber, commitId, files
 ;// CONCATENATED MODULE: ./core/loadPullRequestFiles.ts
 
 
-// Upper bound on the size (decoded content + diff) of a single file we hand to the
-// model. A committed lockfile or generated bundle can, on its own, exceed the entire
-// per-minute input-token rate limit; see the skip in loadPullRequestFiles below.
-const MAX_REVIEWABLE_FILE_CHARS = 70000;
-// Fetches the changed files of a pull request and returns each non-removed file
-// alongside its decoded content. Content is read at `commitId` (the PR head SHA)
-// so the review can't race a moving head. Uses the REST client (octokit.rest)
-// rather than an App-installation-authenticated raw fetch, so this works with any
-// token-authenticated octokit (App installation token or Action GITHUB_TOKEN).
+// Upper bound on a single file's diff that we hand to the model. A committed
+// lockfile or generated bundle's patch can, on its own, exceed the entire
+// per-minute input-token rate limit. Oversized patches are truncated (not
+// dropped) so the file still appears in the review with partial context and
+// the agent can read_file it if needed.
+const MAX_PATCH_CHARS = 70000;
+// Fetches the changed files of a pull request, diff-only: each file's unified
+// diff (`patch`) comes straight from the PR files endpoint, so no per-file
+// Contents API calls and no full file contents in the prompt. Agents that need
+// more context than a hunk shows pull the full file on demand via the
+// read_file tool (see agents/toolHandlers.ts).
 //
-// Files matching `ignorePatterns` (code_review.ignore_patterns) are skipped before
-// their content is fetched, keeping generated/vendored files (e.g. dist/**) out of
-// both the Contents API calls and the LLM prompt — avoiding token rate limits.
-async function loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, ignorePatterns) {
+// Files matching `ignorePatterns` (code_review.ignore_patterns) are skipped,
+// keeping generated/vendored files (e.g. dist/**) out of the LLM prompt and
+// avoiding token rate limits. Removed files are included — their patch shows
+// the deletion, which is reviewable.
+async function loadPullRequestFiles(octokit, owner, repo, pullNumber, ignorePatterns) {
     const files = [];
     const isIgnored = buildIgnoreMatcher(ignorePatterns);
     const response = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
         owner: owner,
         repo: repo,
         pull_number: pullNumber,
+        per_page: 100,
         headers: {
             'X-GitHub-Api-Version': githubApiVersion
         }
@@ -49805,42 +49918,26 @@ async function loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, 
         return files;
     }
     for (const file of response.data) {
-        if (file.status === "removed") {
-            continue;
-        }
         if (isIgnored(file.filename)) {
             console.log(`Skipping ignored file (matches ignore_patterns): ${file.filename}`);
             continue;
         }
-        const { data } = await octokit.rest.repos.getContent({
-            owner: owner,
-            repo: repo,
-            path: file.filename,
-            ref: commitId,
-        });
-        // getContent's response is a union: file | directory | symlink | submodule.
-        // We only handle regular files; skip anything else.
-        if (Array.isArray(data) || data.type !== "file") {
-            continue;
-        }
-        // Files larger than ~1MB are returned without inline content (content is empty
-        // and a download_url is provided instead). Log + skip for now.
-        if (!data.content) {
-            console.warn(`Skipping ${file.filename}: no inline content (file may exceed the 1MB API limit)`);
-            continue;
-        }
-        const content = convertBase64ToString(data.content);
-        // A single oversized file (e.g. a committed lockfile or generated bundle) can,
-        // on its own, exceed the model's per-minute input-token rate limit — starving
-        // every later agent call. Skip it here; the diff is still visible on the PR.
-        const reviewSize = content.length + (file.patch?.length ?? 0);
-        if (reviewSize > MAX_REVIEWABLE_FILE_CHARS) {
-            console.warn(`Skipping ${file.filename}: too large to review (${reviewSize} chars > ${MAX_REVIEWABLE_FILE_CHARS} limit)`);
-            continue;
+        // The endpoint omits `patch` for binary files and very large diffs. Keep the
+        // file (so the reviewer knows it changed) and let formatFilesForPrompt note
+        // that the diff is unavailable.
+        let patch = file.patch;
+        if (patch && patch.length > MAX_PATCH_CHARS) {
+            console.warn(`Truncating oversized diff for ${file.filename} (${patch.length} chars > ${MAX_PATCH_CHARS} limit)`);
+            patch = patch.slice(0, MAX_PATCH_CHARS)
+                + `\n... [diff truncated: showing ${MAX_PATCH_CHARS} of ${patch.length} chars]`;
         }
         files.push({
-            data: file, // raw file metadata from the PR files endpoint
-            content,
+            filename: file.filename,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+            patch,
+            previous_filename: file.previous_filename,
         });
     }
     return files;
@@ -49862,7 +49959,7 @@ async function generateDependencyReview(config, owner, repo, pullNumber, commitI
 // feedback-agent-verified result as a review. Moved from handlers/onManifestChange.ts
 // so all review business logic lives under core/ and stays transport-agnostic.
 async function runManifestReview(config, octokit, owner, repo, pullNumber, commitId, manifestFileData) {
-    console.log("Package manifest files: ", manifestFileData);
+    console.log("Package manifest files: ", manifestFileData.map((f) => f.filename));
     const dependencyReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, manifestFileData, generateDependencyReview);
     console.log(" ----- Dependency Review ------\n", dependencyReviewResponse);
     const finalReview = await runFeedbackAgent(config, owner, repo, pullNumber, commitId, manifestFileData, dependencyReviewResponse);
@@ -49885,13 +49982,13 @@ async function runManifestReview(config, octokit, owner, repo, pullNumber, commi
 // token-authenticated octokit, so it serves both the App and the Action.
 async function reviewPullRequest(octokit, config, ids) {
     const { owner, repo, pullNumber, commitId } = ids;
-    const files = await loadPullRequestFiles(octokit, owner, repo, pullNumber, commitId, config.code_review?.ignore_patterns);
-    console.log("---- Files ----\n", files);
+    const files = await loadPullRequestFiles(octokit, owner, repo, pullNumber, config.code_review?.ignore_patterns);
+    console.log("---- Changed files ----\n", files.map((f) => `${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`));
     //////// Dependency Checker /////////////////////////
     const userRepoManifestFileData = [];
     for (const file of files) {
-        if (config.dependency_review?.manifest_files?.includes(file.data.filename)) {
-            console.log("Package manifest file found: ", file.data.filename);
+        if (config.dependency_review?.manifest_files?.includes(file.filename)) {
+            console.log("Package manifest file found: ", file.filename);
             userRepoManifestFileData.push(file);
         }
     }
@@ -49915,7 +50012,7 @@ async function reviewPullRequest(octokit, config, ids) {
     // Append the ground-truth list of files sent to the reviewer to the posted comment
     // so readers can see the review's coverage. Done here, after the feedback agent, so
     // it can't be dropped when the feedback agent rewrites the body.
-    finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.data.filename));
+    finalReview.body = (finalReview.body || "") + filesReviewedSection(files.map((f) => f.filename));
     await octokit.request('POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews', finalReview);
 }
 

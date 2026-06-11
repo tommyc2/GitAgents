@@ -27,6 +27,7 @@ export interface RepoContext {
     octokit: any;
     owner: string;
     repo: string;
+    commitId: string; // PR head SHA — tools that read repo content pin to this ref
 }
 
 export interface ReviewIdentifiers {
@@ -36,9 +37,15 @@ export interface ReviewIdentifiers {
     commitId: string;
 }
 
+// One changed file from the PR files endpoint, diff-only. Full file contents are
+// no longer loaded upfront — agents pull them on demand via the read_file tool.
 export interface FileData {
-    data: any; // raw file data from GitHub API
-    content: any; // content of the file
+    filename: string;
+    status: string; // added | modified | removed | renamed | ...
+    additions: number;
+    deletions: number;
+    patch?: string; // unified diff; absent for binary or oversized files
+    previous_filename?: string; // set when status is "renamed"
 }
 
 // ---- Code review types ----
@@ -96,7 +103,7 @@ export type GenerateReviewFn = (
     repo: string,
     pullNumber: number,
     commitId: string,
-    files: any[],
+    files: FileData[],
     availableTools: string,
     messages: any[]
 ) => Promise<any>;

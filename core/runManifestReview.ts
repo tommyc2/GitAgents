@@ -8,7 +8,7 @@ import { FileData } from "../types/index.js";
 // so all review business logic lives under core/ and stays transport-agnostic.
 export async function runManifestReview(config, octokit, owner, repo, pullNumber, commitId, manifestFileData: FileData[]) {
 
-    console.log("Package manifest files: ", manifestFileData);
+    console.log("Package manifest files: ", manifestFileData.map((f) => f.filename));
 
     const dependencyReviewResponse = await runAgent(config, octokit, owner, repo, pullNumber, commitId, manifestFileData, generateDependencyReview);
 

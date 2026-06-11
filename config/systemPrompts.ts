@@ -1,5 +1,8 @@
 // system prompts and message templates for the agents
 import { githubApiVersion } from "./config.js";
+import { loadToolUsage } from "./loadToolMap.js";
+import { formatFilesForPrompt } from "../utils/utils.js";
+import { FileData } from "../types/index.js";
 
 export const missingConfigBody = `
 ### Missing Configuration File
@@ -55,13 +58,16 @@ export const codeReviewPrompt = (
   repo: string,
   pullNumber: number,
   commitId: string,
-  files: any[],
+  files: FileData[],
   availableTools: string): string => `
 You are a Senior Code Review Expert.
 
-Review the changed files below:
+Review the pull request below. Each changed file is shown as a unified diff — together they are the complete set of changes under review:
 
-${JSON.stringify(files)}
+${formatFilesForPrompt(files)}
+
+Available tools:
+${loadToolUsage()}
 
 Return **only** a valid JSON Object following one of the two shapes below:
 
@@ -102,6 +108,8 @@ Review guidelines:
 
 - Be concise, constructive, and helpful.
 - Prioritize correctness, clarity, and maintainability.
+- The diffs above cover every changed line. If a hunk lacks enough surrounding context to judge confidently, use the read_file tool to fetch that file's full content instead of guessing.
+- For line-level comments, "line" is the line number in the file after the change (derive it from the @@ hunk headers), with "side": "RIGHT". Use "LEFT" with the old line number only for deleted lines.
 - Use "APPROVE" if the code is robust and solid and include a short message (e.g., 'lgtm' command to approve PR).
 - Use "COMMENT" for non-blocking suggestions or observations.
 - Use "REQUEST_CHANGES" if critical issues MUST be addressed before merging.
@@ -118,14 +126,14 @@ export const feedbackReviewPrompt = (
   repo: string,
   pullNumber: number,
   commitId: string,
-  files: any[],
+  files: FileData[],
   primaryReview: any): string => `
 You are a senior code review verifier in a Quality engineering department.
 
-A primary review agent has already reviewed the following changed files below:
+A primary review agent has already reviewed the changed files below, shown as unified diffs:
 
 ---
-${JSON.stringify(files)}
+${formatFilesForPrompt(files)}
 ---
 
 The primary agent produced this review below:
@@ -179,13 +187,16 @@ export const dependencyReviewPrompt = (
   repo: string,
   pullNumber: number,
   commitId: string,
-  manifestFileData: any[],
+  manifestFileData: FileData[],
   availableTools: string): string => `
 You are a dependency conflict expert.
 
-Review the changed manifest files below specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
+Review the changed manifest files below, shown as unified diffs, specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
 
-${JSON.stringify(manifestFileData)}
+${formatFilesForPrompt(manifestFileData)}
+
+Available tools:
+${loadToolUsage()}
 
 Return **only** a valid JSON object following one of the two shapes below:
 
@@ -217,6 +228,7 @@ Guidelines:
 
 - Focus **ONLY** on dependency manifest files (e.g., package.json, package-lock.json, pom.xml, go.mod, etc).
 - Look for potential conflicts that could or will occur (e.g., mismatched peer dependencies, major version jumps without migration).
+- The diffs show what changed. If you need a manifest's complete dependency list to judge a conflict, use the read_file tool to fetch the full file.
 - Always use "COMMENT" as the event.
 - Do not include a 'comments' field in the content.
 - Keep the body concise.
