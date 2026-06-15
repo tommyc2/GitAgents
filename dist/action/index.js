@@ -49586,12 +49586,39 @@ Anthropic.Beta = beta_Beta;
 
 main_default().config();
 const githubApiVersion = "2022-11-28";
-const openAIClient = new OpenAI({
-    apiKey: process.env['OPENAI_API_KEY']
-});
-const claudeClient = new Anthropic({
-    apiKey: process.env['ANTHROPIC_API_KEY'], // https://github.com/anthropics/anthropic-sdk-typescript
-});
+// Thrown when the API key for the configured provider is absent. A distinct type so
+// callModel can let it propagate as a fatal config error instead of swallowing it
+// into a null (which downstream looks like an API rate limit).
+class MissingApiKeyError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "MissingApiKeyError";
+    }
+}
+// Clients are built lazily, per provider, so the Action only needs the API key for
+// the provider actually configured. Constructing both eagerly meant an Anthropic-only
+// user crashed at module load: the OpenAI SDK throws when OPENAI_API_KEY is absent,
+// while the Anthropic SDK is lenient at construction, which masked the asymmetry.
+let openAIClient = null;
+let claudeClient = null;
+function getOpenAIClient() {
+    if (!process.env['OPENAI_API_KEY']) {
+        throw new MissingApiKeyError("OPENAI_API_KEY is not set. Add it to your repository secrets and pass it via `env:` in your workflow to use OpenAI models.");
+    }
+    if (!openAIClient) {
+        openAIClient = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
+    }
+    return openAIClient;
+}
+function getClaudeClient() {
+    if (!process.env['ANTHROPIC_API_KEY']) {
+        throw new MissingApiKeyError("ANTHROPIC_API_KEY is not set. Add it to your repository secrets and pass it via `env:` in your workflow to use Anthropic (Claude) models.");
+    }
+    if (!claudeClient) {
+        claudeClient = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] });
+    }
+    return claudeClient;
+}
 
 ;// CONCATENATED MODULE: ./agents/callModel.ts
 
@@ -49603,7 +49630,7 @@ async function callModel(config, systemPrompt, messages) {
         : modelName.startsWith("claude") ? "claude" : "openai";
     try {
         if (provider === 'openai') {
-            const response = await openAIClient.responses.create({
+            const response = await getOpenAIClient().responses.create({
                 model: config.model.name,
                 input: [
                     { role: "system", content: systemPrompt },
@@ -49613,7 +49640,7 @@ async function callModel(config, systemPrompt, messages) {
             return JSON.parse(stripCodeFences(response.output_text || "null"));
         }
         if (provider === 'claude' || provider === 'anthropic') {
-            const response = await claudeClient.messages.create({
+            const response = await getClaudeClient().messages.create({
                 max_tokens: config.model.max_tokens,
                 system: systemPrompt,
                 messages: messages,
@@ -49626,6 +49653,11 @@ async function callModel(config, systemPrompt, messages) {
         }
     }
     catch (error) {
+        // A missing API key is a fatal config error — let it surface so the Action
+        // fails with a clear message instead of swallowing it into a null that later
+        // masquerades as an API rate limit. Other errors stay non-fatal as before.
+        if (error instanceof MissingApiKeyError)
+            throw error;
         console.error(`callModel error (provider: ${provider}, model: ${config.model.name}):`, error);
         return null;
     }

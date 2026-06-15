@@ -1,4 +1,4 @@
-import { claudeClient, openAIClient } from "../config/config.js";
+import { getClaudeClient, getOpenAIClient, MissingApiKeyError } from "../config/config.js";
 import { YAMLConfig } from "../types/index.js";
 import { stripCodeFences } from "../utils/utils.js";
 
@@ -10,7 +10,7 @@ export async function callModel(config: YAMLConfig, systemPrompt: string, messag
 
     try {
         if (provider === 'openai') {
-            const response = await openAIClient.responses.create({
+            const response = await getOpenAIClient().responses.create({
                 model: config.model.name as string,
                 input: [
                     { role: "system", content: systemPrompt },
@@ -21,7 +21,7 @@ export async function callModel(config: YAMLConfig, systemPrompt: string, messag
         }
 
         if (provider === 'claude' || provider === 'anthropic') {
-            const response = await claudeClient.messages.create({
+            const response = await getClaudeClient().messages.create({
                 max_tokens: config.model.max_tokens,
                 system: systemPrompt,
                 messages: messages,
@@ -32,6 +32,7 @@ export async function callModel(config: YAMLConfig, systemPrompt: string, messag
             return JSON.parse(stripCodeFences(text));
         }
     } catch (error) {
+        if (error instanceof MissingApiKeyError) throw error;
         console.error(`callModel error (provider: ${provider}, model: ${config.model.name}):`, error);
         return null;
     }
