@@ -27,6 +27,12 @@ async function run(): Promise<void> {
             return;
         }
 
+        const action = payload.action;
+        if (action === "synchronize") {
+            core.info(`Skipping '${action}' event (new commits); the PR was already reviewed on open.`);
+            return;
+        }
+
         const repository = payload.repository;
         if (!repository) {
             core.setFailed("Event payload is missing repository information.");

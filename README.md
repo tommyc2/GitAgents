@@ -62,12 +62,14 @@ permissions:
 
 ## How It Works
 
-1. A pull request is opened and your workflow triggers on `pull_request`.
+1. A pull request is opened (or reopened) and your workflow triggers on `pull_request`.
 2. The action reads the event payload, builds an authenticated Octokit from `github-token`, and loads `agents.config.yaml` from the checked-out workspace (falling back to the repo's default branch via the API if it isn't present on disk).
 3. The changed files are fetched **at the PR head commit** so the review reflects exactly what's proposed.
 4. The Code Review Agent reviews the changed files. If dependency review is enabled and a configured manifest file changed, the Dependency Review Agent also runs.
 5. The Feedback Agent verifies and refines the result (catching false positives and anything missed).
 6. The final review is posted on the pull request.
+
+> **New commits don't re-trigger a review.** The review runs when a PR is opened or reopened. Pushing more commits fires the `pull_request` `synchronize` event, which the action skips — it does **not** re-read the PR files or post another review. To skip these runs entirely (and avoid even starting a runner), set `on: pull_request: types: [opened, reopened]` in your workflow.
 
 ## Configuration
 

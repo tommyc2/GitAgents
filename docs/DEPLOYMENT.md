@@ -99,6 +99,11 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
+The review runs when a PR is opened or reopened. Pushing new commits fires the
+`synchronize` event, which the action skips — it won't re-read the files or post
+another review. To avoid even starting a runner on each push, restrict the
+trigger: `on: pull_request: types: [opened, reopened]`.
+
 ### Required permissions
 
 The job must grant:

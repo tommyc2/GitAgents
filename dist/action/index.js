@@ -49586,19 +49586,12 @@ Anthropic.Beta = beta_Beta;
 
 main_default().config();
 const githubApiVersion = "2022-11-28";
-// Thrown when the API key for the configured provider is absent. A distinct type so
-// callModel can let it propagate as a fatal config error instead of swallowing it
-// into a null (which downstream looks like an API rate limit).
 class MissingApiKeyError extends Error {
     constructor(message) {
         super(message);
         this.name = "MissingApiKeyError";
     }
 }
-// Clients are built lazily, per provider, so the Action only needs the API key for
-// the provider actually configured. Constructing both eagerly meant an Anthropic-only
-// user crashed at module load: the OpenAI SDK throws when OPENAI_API_KEY is absent,
-// while the Anthropic SDK is lenient at construction, which masked the asymmetry.
 let openAIClient = null;
 let claudeClient = null;
 function getOpenAIClient() {
@@ -49653,9 +49646,6 @@ async function callModel(config, systemPrompt, messages) {
         }
     }
     catch (error) {
-        // A missing API key is a fatal config error — let it surface so the Action
-        // fails with a clear message instead of swallowing it into a null that later
-        // masquerades as an API rate limit. Other errors stay non-fatal as before.
         if (error instanceof MissingApiKeyError)
             throw error;
         console.error(`callModel error (provider: ${provider}, model: ${config.model.name}):`, error);
@@ -50109,6 +50099,15 @@ async function run() {
         const sender = payload.sender;
         if (sender?.type === "Bot") {
             core.info(`Skipping event triggered by bot: ${sender['login']}`);
+            return;
+        }
+        // New commits pushed to an open PR fire the `synchronize` action. Reviewing again
+        // would re-read every changed file and re-run the agents, duplicating the initial
+        // review. Only review when the PR is first opened or reopened. (Re-requesting a
+        // review on demand, e.g. via @mention, is a separate feature.)
+        const action = payload.action;
+        if (action === "synchronize") {
+            core.info(`Skipping '${action}' event (new commits); the PR was already reviewed on open.`);
             return;
         }
         const repository = payload.repository;
