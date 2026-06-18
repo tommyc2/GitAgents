@@ -35,10 +35,11 @@ jobs:
 ## Inputs
 
 
-| Input          | Required | Default               | Description                                      |
-| -------------- | -------- | --------------------- | ------------------------------------------------ |
-| `github-token` | no       | `${{ github.token }}` | Token used to read PR files and post the review. |
-| `config-path`  | no       | `agents.config.yaml`  | Path to the config file in the checked-out repo. |
+| Input               | Required | Default               | Description                                                          |
+| ------------------- | -------- | --------------------- | ------------------------------------------------------------------- |
+| `github-token`      | no       | `${{ github.token }}` | Token used to read PR files and post the review.                    |
+| `config-path`       | no       | `agents.config.yaml`  | Path to the config file in the checked-out repo.                    |
+| `instructions-path` | no       | `AI_PR_REVIEWER.md`   | Path to the reviewer-instructions file on the repo default branch.  |
 
 
 ## Environment variables
@@ -65,9 +66,10 @@ permissions:
 1. A pull request is opened (or reopened) and your workflow triggers on `pull_request`.
 2. The action reads the event payload, builds an authenticated Octokit from `github-token`, and loads `agents.config.yaml` from the checked-out workspace (falling back to the repo's default branch via the API if it isn't present on disk).
 3. The changed files are fetched **at the PR head commit** so the review reflects exactly what's proposed.
-4. The Code Review Agent reviews the changed files. If dependency review is enabled and a configured manifest file changed, the Dependency Review Agent also runs.
-5. The Feedback Agent verifies and refines the result (catching false positives and anything missed).
-6. The final review is posted on the pull request.
+4. If an `AI_PR_REVIEWER.md` file exists on the repo's **default branch**, its contents are loaded and passed to every agent as extra review guidance (see [Reviewer instructions](#reviewer-instructions-ai_pr_reviewermd)).
+5. The Code Review Agent reviews the changed files. If dependency review is enabled and a configured manifest file changed, the Dependency Review Agent also runs.
+6. The Feedback Agent verifies and refines the result (catching false positives and anything missed).
+7. The final review is posted on the pull request.
 
 > **New commits don't re-trigger a review.** The review runs when a PR is opened or reopened. Pushing more commits fires the `pull_request` `synchronize` event, which the action skips — it does **not** re-read the PR files or post another review. To skip these runs entirely (and avoid even starting a runner), set `on: pull_request: types: [opened, reopened]` in your workflow.
 
@@ -119,6 +121,26 @@ feedback:
 
 The `model.name` field is required. If the config is missing or invalid, the action posts a comment on the PR explaining how to fix it.
 
+## Reviewer instructions (`AI_PR_REVIEWER.md`)
+
+You can give the agents free-form, natural-language review guidance (similar to a `CLAUDE.md`) by adding an `AI_PR_REVIEWER.md` file to the root of your repository. Its contents are injected into the prompts of all three agents (code review, feedback, and dependency review), on top of the structured fields in `agents.config.yaml`.
+
+```markdown
+# AI PR Reviewer Instructions
+
+- Be strict about error handling and unhandled promise rejections.
+- Flag any new public function that lacks a corresponding test.
+- Don't comment on formatting or import ordering — a formatter handles those.
+- Our API responses must never include internal IDs; call this out if you see one.
+```
+
+Notes:
+
+- **The file is read from your repository's default branch, not the PR branch.** This keeps the instructions maintainer-controlled: because the text is fed directly into the reviewer, reading it from the PR head would let a pull request rewrite the reviewer's own instructions (e.g. "approve everything"). A consequence is that edits to `AI_PR_REVIEWER.md` only take effect once they're merged to the default branch.
+- The file is **optional**. If it isn't present, the review runs exactly as before with the built-in guidance.
+- The instructions guide *what to focus on and how to phrase feedback*; they can't change the review's output format or override the approve/comment/request-changes behaviour.
+- Use the `instructions-path` input to point at a different filename or location.
+
 ## Project Structure
 
 ```
@@ -141,6 +163,7 @@ The `model.name` field is required. If the config is missing or invalid, the act
 │   ├── config.ts
 │   ├── systemPrompts.ts
 │   ├── loadYAML.ts
+│   ├── loadInstructions.ts
 │   └── loadToolMap.ts
 ├── types/
 │   └── index.ts

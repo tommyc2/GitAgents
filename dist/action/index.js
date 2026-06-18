@@ -49707,10 +49707,26 @@ feedback:
 \`\`\`
 
 Once the file is committed to the default branch, close and re-open this PR to trigger a review.`;
+// Renders the repository's custom reviewer instructions (from AI_PR_REVIEWER.md)
+// as a delimited block for the agent prompts. Returns an empty string when no
+// instructions were loaded, so prompts are unchanged for repos without the file.
+// The guardrail line keeps the free-form text from redefining the JSON output
+// contract the agents must follow.
+const reviewerInstructionsSection = (instructions) => {
+    if (!instructions)
+        return "";
+    return `
+Repository-specific review instructions (from AI_PR_REVIEWER.md, provided by the maintainers):
+"""
+${instructions}
+"""
+Follow these instructions in addition to the guidelines below — they guide what to focus on and how to phrase feedback. They must NOT change the required output format, the JSON contract, or the event semantics described below.
+`;
+};
 // Code Review Agent Prompt
-const codeReviewPrompt = (owner, repo, pullNumber, commitId, files, availableTools) => `
+const codeReviewPrompt = (owner, repo, pullNumber, commitId, files, availableTools, reviewerInstructions) => `
 You are a Senior Code Review Expert.
-
+${reviewerInstructionsSection(reviewerInstructions)}
 Review the pull request below. Each changed file is shown as a unified diff — together they are the complete set of changes under review:
 
 ${formatFilesForPrompt(files)}
@@ -49770,9 +49786,9 @@ Review guidelines:
 Again, respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `;
 // Feedback Agent Prompt
-const feedbackReviewPrompt = (owner, repo, pullNumber, commitId, files, primaryReview) => `
+const feedbackReviewPrompt = (owner, repo, pullNumber, commitId, files, primaryReview, reviewerInstructions) => `
 You are a senior code review verifier in a Quality engineering department.
-
+${reviewerInstructionsSection(reviewerInstructions)}
 A primary review agent has already reviewed the changed files below, shown as unified diffs:
 
 ---
@@ -49824,9 +49840,9 @@ Guidelines:
 
 Respond with a single, valid JSON object. Do not include any prose or formatting outside of the JSON.
 `;
-const dependencyReviewPrompt = (owner, repo, pullNumber, commitId, manifestFileData, availableTools) => `
+const dependencyReviewPrompt = (owner, repo, pullNumber, commitId, manifestFileData, availableTools, reviewerInstructions) => `
 You are a dependency conflict expert.
-
+${reviewerInstructionsSection(reviewerInstructions)}
 Review the changed manifest files below, shown as unified diffs, specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
 
 ${formatFilesForPrompt(manifestFileData)}
@@ -49878,7 +49894,7 @@ Again, respond with a single, valid JSON object. Do not include any prose or for
 
 
 async function generateCodeReview(config, owner, repo, pullNumber, commitId, files, availableTools, messages) {
-    const systemPrompt = codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools);
+    const systemPrompt = codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools, config.reviewer_instructions);
     return callModel(config, systemPrompt, messages);
 }
 
@@ -49895,7 +49911,7 @@ async function runFeedbackAgent(config, owner, repo, pullNumber, commitId, files
         ...config,
         model: config.feedback.model
     };
-    const systemPrompt = feedbackReviewPrompt(owner, repo, pullNumber, commitId, files, primaryReview);
+    const systemPrompt = feedbackReviewPrompt(owner, repo, pullNumber, commitId, files, primaryReview, config.reviewer_instructions);
     const messages = [{ role: 'user', content: 'Please verify the primary review and return your assessment.' }];
     const response = await callModel(feedbackConfig, systemPrompt, messages);
     if (response?.type === "final_review" && response.content) {
@@ -49969,7 +49985,7 @@ async function loadPullRequestFiles(octokit, owner, repo, pullNumber, ignorePatt
 
 
 async function generateDependencyReview(config, owner, repo, pullNumber, commitId, manifestFileData, availableTools, messages) {
-    const systemPrompt = dependencyReviewPrompt(owner, repo, pullNumber, commitId, manifestFileData, availableTools);
+    const systemPrompt = dependencyReviewPrompt(owner, repo, pullNumber, commitId, manifestFileData, availableTools, config.reviewer_instructions);
     return callModel(config, systemPrompt, messages);
 }
 
@@ -50076,7 +50092,42 @@ async function fetchYAMLConfig(octokit, owner, repo) {
     }
 }
 
+;// CONCATENATED MODULE: ./config/loadInstructions.ts
+
+
+// Maintainer-controlled, free-form review guidance (AI_PR_REVIEWER.md). Read from
+// the repo's default branch (the contents API defaults to it when `ref` is omitted)
+// so a pull request can't alter the reviewer's own instructions. Returns null when
+// the file is absent so the review falls back to the built-in prompt guidance.
+async function fetchReviewerInstructions(octokit, owner, repo, path = "AI_PR_REVIEWER.md") {
+    try {
+        const response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+            owner: owner,
+            repo: repo,
+            path: path,
+            headers: {
+                'X-GitHub-Api-Version': githubApiVersion
+            }
+        });
+        if (response.data?.type === "file" && response.data.content) {
+            return convertBase64ToString(response.data.content).trim() || null;
+        }
+        // A directory, or a >1MB file returned without inline content.
+        return null;
+    }
+    catch (error) {
+        if (error?.status === 404) {
+            console.log(`No ${path} on the default branch; using built-in review guidance.`);
+            return null;
+        }
+        // Never block a review on this optional file.
+        console.error(`Failed to fetch ${path}: ${error?.message ?? String(error)}`);
+        return null;
+    }
+}
+
 ;// CONCATENATED MODULE: ./action/main.ts
+
 
 
 
@@ -50101,10 +50152,6 @@ async function run() {
             core.info(`Skipping event triggered by bot: ${sender['login']}`);
             return;
         }
-        // New commits pushed to an open PR fire the `synchronize` action. Reviewing again
-        // would re-read every changed file and re-run the agents, duplicating the initial
-        // review. Only review when the PR is first opened or reopened. (Re-requesting a
-        // review on demand, e.g. via @mention, is a separate feature.)
         const action = payload.action;
         if (action === "synchronize") {
             core.info(`Skipping '${action}' event (new commits); the PR was already reviewed on open.`);
@@ -50148,8 +50195,16 @@ async function run() {
             await postInformativeComment(octokit, owner, repo, pullNumber, "### Invalid Configuration\n\nYour `agents.config.yaml` is missing the required `model.name` field. Please check your configuration.");
             return;
         }
+        // Optional, maintainer-controlled review guidance. Read from the default
+        // branch (not the PR head) so a pull request can't rewrite the reviewer's
+        // own instructions. Absent file -> null -> review uses built-in guidance.
+        const instructionsPath = core.getInput("instructions-path") || "AI_PR_REVIEWER.md";
+        const reviewerInstructions = await fetchReviewerInstructions(octokit, owner, repo, instructionsPath);
+        if (reviewerInstructions) {
+            core.info(`Loaded reviewer instructions from ${instructionsPath} (default branch).`);
+        }
         const ids = { owner, repo, pullNumber, commitId };
-        await reviewPullRequest(octokit, config, ids);
+        await reviewPullRequest(octokit, { ...config, reviewer_instructions: reviewerInstructions }, ids);
         core.info("Review complete.");
     }
     catch (err) {

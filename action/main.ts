@@ -3,6 +3,7 @@ import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { reviewPullRequest } from "../core/reviewPullRequest.js";
 import { fetchYAMLConfig } from "../config/loadYAML.js";
+import { fetchReviewerInstructions } from "../config/loadInstructions.js";
 import { parseYAML, postInformativeComment } from "../utils/utils.js";
 import { missingConfigBody } from "../config/systemPrompts.js";
 import { YAMLConfig, ReviewIdentifiers } from "../types/index.js";
@@ -79,8 +80,17 @@ async function run(): Promise<void> {
             return;
         }
 
+        // Optional, maintainer-controlled review guidance. Read from the default
+        // branch (not the PR head) so a pull request can't rewrite the reviewer's
+        // own instructions. Absent file -> null -> review uses built-in guidance.
+        const instructionsPath = core.getInput("instructions-path") || "AI_PR_REVIEWER.md";
+        const reviewerInstructions = await fetchReviewerInstructions(octokit, owner, repo, instructionsPath);
+        if (reviewerInstructions) {
+            core.info(`Loaded reviewer instructions from ${instructionsPath} (default branch).`);
+        }
+
         const ids: ReviewIdentifiers = { owner, repo, pullNumber, commitId };
-        await reviewPullRequest(octokit, config, ids);
+        await reviewPullRequest(octokit, { ...config, reviewer_instructions: reviewerInstructions }, ids);
 
         core.info("Review complete.");
     } catch (err) {

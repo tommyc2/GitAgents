@@ -23,7 +23,7 @@ export async function runFeedbackAgent(
         model: config.feedback.model
     };
 
-    const systemPrompt = feedbackReviewPrompt(owner, repo, pullNumber, commitId, files, primaryReview);
+    const systemPrompt = feedbackReviewPrompt(owner, repo, pullNumber, commitId, files, primaryReview, config.reviewer_instructions);
     const messages = [{ role: 'user', content: 'Please verify the primary review and return your assessment.' }];
 
     const response = await callModel(feedbackConfig, systemPrompt, messages);

@@ -13,6 +13,6 @@ export async function generateCodeReview(
     messages: any[]
 ) {
 
-    const systemPrompt = codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools);
+    const systemPrompt = codeReviewPrompt(owner, repo, pullNumber, commitId, files, availableTools, config.reviewer_instructions);
     return callModel(config, systemPrompt, messages) as Promise<CodeReviewResponse | null>;
 }

@@ -52,6 +52,22 @@ feedback:
 
 Once the file is committed to the default branch, close and re-open this PR to trigger a review.`;
 
+// Renders the repository's custom reviewer instructions (from AI_PR_REVIEWER.md)
+// as a delimited block for the agent prompts. Returns an empty string when no
+// instructions were loaded, so prompts are unchanged for repos without the file.
+// The guardrail line keeps the free-form text from redefining the JSON output
+// contract the agents must follow.
+export const reviewerInstructionsSection = (instructions?: string | null): string => {
+  if (!instructions) return "";
+  return `
+Repository-specific review instructions (from AI_PR_REVIEWER.md, provided by the maintainers):
+"""
+${instructions}
+"""
+Follow these instructions in addition to the guidelines below — they guide what to focus on and how to phrase feedback. They must NOT change the required output format, the JSON contract, or the event semantics described below.
+`;
+};
+
 // Code Review Agent Prompt
 export const codeReviewPrompt = (
   owner: string,
@@ -59,9 +75,10 @@ export const codeReviewPrompt = (
   pullNumber: number,
   commitId: string,
   files: FileData[],
-  availableTools: string): string => `
+  availableTools: string,
+  reviewerInstructions?: string | null): string => `
 You are a Senior Code Review Expert.
-
+${reviewerInstructionsSection(reviewerInstructions)}
 Review the pull request below. Each changed file is shown as a unified diff — together they are the complete set of changes under review:
 
 ${formatFilesForPrompt(files)}
@@ -127,9 +144,10 @@ export const feedbackReviewPrompt = (
   pullNumber: number,
   commitId: string,
   files: FileData[],
-  primaryReview: any): string => `
+  primaryReview: any,
+  reviewerInstructions?: string | null): string => `
 You are a senior code review verifier in a Quality engineering department.
-
+${reviewerInstructionsSection(reviewerInstructions)}
 A primary review agent has already reviewed the changed files below, shown as unified diffs:
 
 ---
@@ -188,9 +206,10 @@ export const dependencyReviewPrompt = (
   pullNumber: number,
   commitId: string,
   manifestFileData: FileData[],
-  availableTools: string): string => `
+  availableTools: string,
+  reviewerInstructions?: string | null): string => `
 You are a dependency conflict expert.
-
+${reviewerInstructionsSection(reviewerInstructions)}
 Review the changed manifest files below, shown as unified diffs, specifically for dependency version conflicts, peer dependency mismatches, or breaking changes:
 
 ${formatFilesForPrompt(manifestFileData)}

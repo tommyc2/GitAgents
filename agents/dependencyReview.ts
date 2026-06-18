@@ -12,6 +12,6 @@ export async function generateDependencyReview(
     availableTools: string,
     messages: any[]
 ) {
-    const systemPrompt = dependencyReviewPrompt(owner, repo, pullNumber, commitId, manifestFileData, availableTools);
+    const systemPrompt = dependencyReviewPrompt(owner, repo, pullNumber, commitId, manifestFileData, availableTools, config.reviewer_instructions);
     return callModel(config, systemPrompt, messages) as Promise<DependencyReviewResponse | null>;
 }

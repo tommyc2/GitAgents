@@ -4,6 +4,7 @@ export interface YAMLConfig {
     global_config: any;
     code_review: any;
     dependency_review: any;
+    reviewer_instructions?: string | null; // loaded from AI_PR_REVIEWER.md (not from YAML)
     feedback?: {
         enabled: boolean;
         model: {

@@ -13,6 +13,10 @@ inputs:
     description: 'Path to agents.config.yaml in the checked-out repo'
     required: false
     default: 'agents.config.yaml'
+  instructions-path:
+    description: 'Path to the reviewer-instructions markdown file on the default branch'
+    required: false
+    default: 'AI_PR_REVIEWER.md'
 runs:
   using: 'node20'
   main: 'dist/action/index.js'
